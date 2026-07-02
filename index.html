@@ -10206,13 +10206,54 @@ function initDailyJobLog(){
 </style>
 
 
-<script id="ahmed-save-course-working-final">
+
+<style id="ahmed-courses-rebuild-clean-css">
+  #page-courses .crx-wrap{display:grid;gap:14px;max-width:1180px;margin:0 auto;}
+  #page-courses .crx-panel{background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:14px;}
+  #page-courses .crx-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
+  #page-courses .crx-title h3{margin:0;font-size:16px;color:var(--text);}
+  #page-courses .crx-title small{display:block;color:var(--text2);font-size:12px;margin-top:3px;line-height:1.45;}
+  #page-courses .crx-grid{display:grid;grid-template-columns:350px 1fr;gap:14px;align-items:start;}
+  #page-courses .crx-row{display:grid;grid-template-columns:1fr auto;gap:10px;}
+  #page-courses .crx-formgrid{display:grid;grid-template-columns:1fr 180px 170px;gap:10px;}
+  #page-courses .crx-field{display:grid;gap:6px;}
+  #page-courses .crx-field label{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);}
+  #page-courses .crx-input,#page-courses .crx-select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:12px;color:var(--text);font-family:'DM Sans',sans-serif;outline:none;}
+  #page-courses .crx-input:focus,#page-courses .crx-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(88,166,255,.10);}
+  #page-courses .crx-btn{border:none;border-radius:14px;padding:12px 14px;background:var(--accent2);color:#fff;font-weight:900;font-family:'DM Sans',sans-serif;cursor:pointer;min-height:44px;}
+  #page-courses .crx-btn.secondary{background:var(--bg3);border:1px solid var(--border2);color:var(--text);}
+  #page-courses .crx-btn.danger{background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.32);color:#ff7b72;}
+  #page-courses .crx-employee{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:16px;padding:12px;margin-top:10px;cursor:pointer;}
+  #page-courses .crx-employee.active{border-color:rgba(88,166,255,.65);background:rgba(88,166,255,.10);}
+  #page-courses .crx-employee strong{font-size:14px;color:var(--text);}
+  #page-courses .crx-employee small{display:block;margin-top:4px;font-size:12px;color:var(--text2);}
+  #page-courses .crx-actions{display:grid;gap:7px;min-width:90px;}
+  #page-courses .crx-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;}
+  #page-courses .crx-tile{background:var(--bg3);border:1px solid var(--border);border-radius:16px;padding:12px;}
+  #page-courses .crx-tile span{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);font-weight:800;}
+  #page-courses .crx-tile b{display:block;margin-top:6px;color:var(--accent);font-size:20px;font-family:'DM Mono',monospace;}
+  #page-courses .crx-course{background:var(--bg3);border:1px solid var(--border);border-radius:16px;padding:12px;margin-top:10px;}
+  #page-courses .crx-course strong{font-size:14px;color:var(--text);}
+  #page-courses .crx-course small{display:block;margin-top:5px;color:var(--text2);font-size:12px;}
+  #page-courses .crx-pill{display:inline-block;margin-top:8px;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:900;}
+  #page-courses .crx-pill.ok{background:rgba(63,185,80,.14);color:var(--green);}
+  #page-courses .crx-pill.soon{background:rgba(210,153,34,.14);color:var(--orange);}
+  #page-courses .crx-pill.expired{background:rgba(248,81,73,.14);color:var(--red);}
+  #page-courses .crx-empty{border:1px dashed var(--border2);background:var(--bg3);border-radius:16px;padding:16px;text-align:center;color:var(--text2);font-size:13px;line-height:1.5;}
+  #page-courses .crx-category-row{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px;}
+  #page-courses .crx-msg{font-size:12px;color:var(--green);min-height:18px;margin-top:8px;}
+  @media(max-width:820px){
+    #page-courses .crx-grid{grid-template-columns:1fr;}
+    #page-courses .crx-formgrid{grid-template-columns:1fr;}
+    #page-courses .crx-summary{grid-template-columns:1fr 1fr;}
+    #page-courses .crx-row{grid-template-columns:1fr;}
+  }
+</style>
+
+
+<script id="ahmed-courses-rebuild-clean-js">
 (function(){
   "use strict";
-
-  function $(id){ return document.getElementById(id); }
-  function clean(v){ return String(v == null ? "" : v).trim(); }
-  function uid(prefix){ return (prefix || "id") + "_" + Date.now() + "_" + Math.random().toString(16).slice(2); }
 
   var EMP_KEY = "crEmployees";
   var COURSE_KEY = "crCourses";
@@ -10220,116 +10261,58 @@ function initDailyJobLog(){
   var CURRENT_KEY = "crCurrentEmployeeId";
   var DEFAULT_CATEGORIES = ["HSE","Driving","Technical","OPAL","Safety","Medical","Well Control","Other"];
 
+  function $(id){ return document.getElementById(id); }
+  function clean(v){ return String(v == null ? "" : v).trim(); }
+  function uid(prefix){ return (prefix || "id") + "_" + Date.now() + "_" + Math.random().toString(16).slice(2); }
   function esc(v){
-    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
+    return String(v == null ? "" : v).replace(/[&<>"']/g,function(c){
       return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
     });
   }
-
-  function toast(msg){
-    var t = $("toast");
-    if(!t){
-      t = document.createElement("div");
-      t.id = "toast";
-      t.className = "toast";
-      document.body.appendChild(t);
-    }
-    t.textContent = msg || "";
-    t.classList.add("show");
-    clearTimeout(window.__saveCourseToastTimer);
-    window.__saveCourseToastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2200);
-  }
-
-  function loadArray(key){
+  function load(key){
     try{
       var v = JSON.parse(localStorage.getItem(key) || "[]");
       return Array.isArray(v) ? v : [];
-    }catch(e){
-      return [];
-    }
+    }catch(e){ return []; }
   }
+  function save(key,val){ localStorage.setItem(key, JSON.stringify(val || [])); }
 
-  function saveArray(key, value){
-    try{ localStorage.setItem(key, JSON.stringify(value || [])); }catch(e){}
+  function employees(){
+    return load(EMP_KEY).map(function(e){
+      e = e || {};
+      return { id:String(e.id || e.empId || e.employeeId || uid("emp")), name:clean(e.name || e.employeeName || e.fullName || "Employee"), createdAt:e.createdAt || "" };
+    }).filter(function(e){ return e.name; });
   }
+  function saveEmployees(list){ save(EMP_KEY, list); }
 
-  function employees(){ return loadArray(EMP_KEY); }
-  function courses(){ return loadArray(COURSE_KEY); }
-  function saveEmployees(list){ saveArray(EMP_KEY, list); }
-  function saveCourses(list){ saveArray(COURSE_KEY, list); }
-
-  function normalizeEmployee(emp){
-    if(!emp) return null;
-    if(!emp.id) emp.id = uid("emp");
-    emp.id = String(emp.id);
-    emp.name = clean(emp.name || emp.employeeName || emp.fullName || "Employee");
-    return emp;
+  function courses(){
+    return load(COURSE_KEY).map(function(c){
+      c = c || {};
+      var eid = clean(c.empId || c.employeeId || c.employeeID || c.employee_id);
+      return {
+        id:String(c.id || uid("course")),
+        empId:eid,
+        employeeId:eid,
+        employeeName:clean(c.employeeName || ""),
+        name:clean(c.name || c.courseName || ""),
+        expiry:clean(c.expiry || c.expiryDate || c.date || ""),
+        category:clean(c.category || "Other"),
+        createdAt:c.createdAt || ""
+      };
+    }).filter(function(c){ return c.empId && c.name; });
   }
+  function saveCourses(list){ save(COURSE_KEY, list); }
 
-  function normalizeCourse(course){
-    if(!course) return null;
-    if(!course.id) course.id = uid("course");
-    course.id = String(course.id);
-    var eid = clean(course.empId || course.employeeId || course.employeeID || course.employee_id);
-    course.empId = eid;
-    course.employeeId = eid;
-    course.name = clean(course.name || course.courseName || "Course");
-    course.expiry = clean(course.expiry || course.expiryDate || course.date || "");
-    course.category = clean(course.category || "Other");
-    return course;
-  }
-
-  function saveNormalized(){
-    var empList = employees().map(normalizeEmployee).filter(Boolean);
-    saveEmployees(empList);
+  function normalizeSave(){
+    var es = employees();
+    saveEmployees(es);
     var ids = {};
-    empList.forEach(function(e){ ids[String(e.id)] = true; });
-    var courseList = courses().map(normalizeCourse).filter(function(c){
-      return c && c.empId && ids[String(c.empId)];
-    });
-    saveCourses(courseList);
-  }
-
-  function currentEmpId(){
-    return clean(localStorage.getItem(CURRENT_KEY) || window.crCurrentEmployeeId || "");
-  }
-
-  function setCurrentEmpId(id){
-    id = clean(id);
-    try{ localStorage.setItem(CURRENT_KEY, id); }catch(e){}
-    window.crCurrentEmployeeId = id;
-  }
-
-  function empById(id){
-    id = clean(id);
-    return employees().map(normalizeEmployee).find(function(e){ return String(e.id) === id; }) || null;
-  }
-
-  function currentEmployee(){
-    var emp = empById(currentEmpId());
-    if(emp) return emp;
-
-    var active = document.querySelector("#cr-employee-list .employee-file.active-employee");
-    if(active){
-      emp = empById(active.getAttribute("data-emp-id"));
-      if(emp){
-        setCurrentEmpId(emp.id);
-        return emp;
-      }
-    }
-
-    var list = employees().map(normalizeEmployee).filter(Boolean);
-    if(list.length){
-      setCurrentEmpId(list[0].id);
-      return list[0];
-    }
-
-    return null;
+    es.forEach(function(e){ ids[String(e.id)] = true; });
+    saveCourses(courses().filter(function(c){ return ids[String(c.empId)]; }));
   }
 
   function categories(){
-    var custom = loadArray(CAT_KEY);
-    var all = DEFAULT_CATEGORIES.concat(custom);
+    var all = DEFAULT_CATEGORIES.concat(load(CAT_KEY));
     var seen = {};
     return all.filter(function(c){
       c = clean(c);
@@ -10340,309 +10323,267 @@ function initDailyJobLog(){
     });
   }
 
-  function fillCategorySelect(){
-    var sel = $("cr-category");
-    if(!sel) return;
-    var old = sel.value;
-    sel.innerHTML = categories().map(function(c){
-      return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
-    }).join("");
-    if(old) sel.value = old;
+  function setMsg(msg){
+    var el = $("crx-msg");
+    if(el) el.textContent = msg || "";
   }
 
-  function getCoursesForEmp(empId){
-    empId = String(empId);
-    return courses().map(normalizeCourse).filter(function(c){
-      return c && String(c.empId) === empId;
-    });
+  function selectedId(){ return clean(localStorage.getItem(CURRENT_KEY) || ""); }
+  function setSelected(id){
+    localStorage.setItem(CURRENT_KEY, String(id || ""));
+    window.crCurrentEmployeeId = String(id || "");
+  }
+  function empById(id){
+    id = String(id || "");
+    return employees().find(function(e){ return String(e.id) === id; }) || null;
   }
 
   function statusFor(dateStr){
     if(!dateStr) return {text:"No expiry", cls:"soon"};
-    var today = new Date();
-    today.setHours(0,0,0,0);
+    var today = new Date(); today.setHours(0,0,0,0);
     var d = new Date(dateStr + "T00:00:00");
-    var diff = Math.ceil((d - today) / 86400000);
+    var diff = Math.ceil((d - today)/86400000);
     if(diff < 0) return {text:"Expired " + Math.abs(diff) + " day(s) ago", cls:"expired"};
     if(diff <= 30) return {text:"Need Action: " + diff + " day(s) left", cls:"soon"};
     return {text:"Valid: " + diff + " day(s) left", cls:"ok"};
   }
-
-  function formatDate(dateStr){
+  function fmtDate(dateStr){
     if(!dateStr) return "-";
     try{ return new Date(dateStr + "T00:00:00").toLocaleDateString(); }catch(e){ return dateStr; }
   }
 
-  window.addCourseCategory = function(){
-    var input = $("cr-new-category");
-    var value = clean(input && input.value);
-    if(!value) return false;
+  function buildCoursesPage(){
+    var page = $("page-courses");
+    if(!page) return;
+    page.innerHTML =
+      '<div class="crx-wrap">' +
+        '<div class="section-label">Courses Renewal</div>' +
+        '<div class="crx-panel">' +
+          '<div class="crx-title"><div><h3>Employee Profiles</h3><small>Add employee, open profile, then save courses inside the selected profile.</small></div><span class="auto-save-pill">Auto Save</span></div>' +
+          '<div class="crx-row">' +
+            '<div class="crx-field"><label>Employee Name</label><input id="crx-employee-name" class="crx-input" type="text" placeholder="Ahmed Al Bakri"></div>' +
+            '<button id="crx-add-employee" class="crx-btn" type="button">+ Add Employee</button>' +
+          '</div>' +
+          '<div id="crx-msg" class="crx-msg"></div>' +
+        '</div>' +
+        '<div class="crx-grid">' +
+          '<div class="crx-panel">' +
+            '<div class="crx-title"><div><h3>Employees</h3><small>Tap employee or Open to view profile.</small></div><span id="crx-count" class="count-pill">0</span></div>' +
+            '<input id="crx-search" class="crx-input" type="text" placeholder="Search employee...">' +
+            '<div id="crx-employee-list"></div>' +
+          '</div>' +
+          '<div id="crx-profile" class="crx-panel">' +
+            '<div id="crx-profile-content" class="crx-empty">Add or open an employee profile first.</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
 
-    var custom = loadArray(CAT_KEY);
-    if(!custom.some(function(c){ return clean(c).toLowerCase() === value.toLowerCase(); })){
-      custom.push(value);
-      saveArray(CAT_KEY, custom);
-    }
-    if(input) input.value = "";
-    fillCategorySelect();
-    var sel = $("cr-category");
-    if(sel) sel.value = value;
-    toast("Category saved.");
-    return false;
-  };
+    $("crx-add-employee").addEventListener("click", addEmployee);
+    $("crx-employee-name").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); addEmployee(); } });
+    $("crx-search").addEventListener("input", renderEmployees);
+  }
 
-  window.addEmployeeOnlyProfile = function(){
-    var input = $("cr-employee-name");
+  function addEmployee(){
+    var input = $("crx-employee-name");
     var name = clean(input && input.value);
-    if(!name){
-      toast("Enter employee name.");
-      if(input) input.focus();
-      return false;
-    }
+    if(!name){ setMsg("Enter employee name."); if(input) input.focus(); return false; }
 
-    var list = employees().map(normalizeEmployee).filter(Boolean);
+    var list = employees();
     var emp = list.find(function(e){ return clean(e.name).toLowerCase() === name.toLowerCase(); });
     if(!emp){
       emp = {id:uid("emp"), name:name, createdAt:new Date().toISOString()};
       list.push(emp);
       saveEmployees(list);
     }
-
     if(input) input.value = "";
-    setCurrentEmpId(emp.id);
-    renderCourseEmployeesFinal();
-    openCourseEmployeeFinal(emp.id);
-    toast("Employee saved.");
-    return false;
-  };
-
-  function openCourseEmployeeFinal(empId){
-    var emp = empById(empId);
-    if(!emp) return false;
-
-    setCurrentEmpId(emp.id);
-    var area = $("cr-course-area");
-    var noFile = $("cr-no-file");
-    if(area) area.style.display = "block";
-    if(noFile) noFile.style.display = "none";
-
-    fillCategorySelect();
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
-
-    var form = $("cr-profile-course-form");
-    if(form) form.style.display = "none";
-
+    setSelected(emp.id);
+    renderAll();
+    setMsg("Employee saved.");
     return false;
   }
 
-  window.openCourseEmployee = openCourseEmployeeFinal;
-  window.openEmployeeProfile = openCourseEmployeeFinal;
-  window.selectCourseEmployee = openCourseEmployeeFinal;
-
-  window.toggleProfileCourseForm = function(force){
-    var form = $("cr-profile-course-form");
-    if(!form) return false;
-
-    var emp = currentEmployee();
-    if(!emp){
-      toast("Add employee first.");
-      return false;
-    }
-
-    var area = $("cr-course-area");
-    var noFile = $("cr-no-file");
-    if(area) area.style.display = "block";
-    if(noFile) noFile.style.display = "none";
-
-    fillCategorySelect();
-
-    var shouldShow = (typeof force === "boolean") ? force : (form.style.display === "none" || !form.style.display);
-    form.style.display = shouldShow ? "block" : "none";
+  function openProfile(id){
+    if(!empById(id)) return false;
+    setSelected(id);
+    renderAll();
     return false;
-  };
+  }
 
-  window.addEmployeeCourse = function(){
-    saveNormalized();
-
-    var emp = currentEmployee();
-    if(!emp){
-      toast("Open employee profile first.");
-      return false;
-    }
-
-    var nameEl = $("cr-course-name");
-    var dateEl = $("cr-expiry-date");
-    var catEl = $("cr-category");
-
-    var courseName = clean(nameEl && nameEl.value);
-    var expiry = clean(dateEl && dateEl.value);
-    var category = clean(catEl && catEl.value) || "Other";
-
-    if(!courseName){
-      toast("Enter course name.");
-      if(nameEl) nameEl.focus();
-      return false;
-    }
-    if(!expiry){
-      toast("Enter expiry date.");
-      if(dateEl) dateEl.focus();
-      return false;
-    }
-
-    var list = courses().map(normalizeCourse).filter(Boolean);
-    var newCourse = {
-      id: uid("course"),
-      empId: String(emp.id),
-      employeeId: String(emp.id),
-      employeeName: emp.name,
-      name: courseName,
-      expiry: expiry,
-      category: category,
-      createdAt: new Date().toISOString()
-    };
-
-    list.push(newCourse);
-    saveCourses(list);
-
-    if(nameEl) nameEl.value = "";
-    if(dateEl) dateEl.value = "";
-    var form = $("cr-profile-course-form");
-    if(form) form.style.display = "none";
-
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
-    toast("Course saved.");
+  function deleteEmployee(id){
+    id = String(id || "");
+    saveEmployees(employees().filter(function(e){ return String(e.id) !== id; }));
+    saveCourses(courses().filter(function(c){ return String(c.empId) !== id; }));
+    if(selectedId() === id) setSelected("");
+    renderAll();
+    setMsg("Employee deleted.");
     return false;
-  };
+  }
 
-  window.deleteEmployeeCourse = function(courseId){
-    courseId = String(courseId);
-    saveCourses(courses().map(normalizeCourse).filter(function(c){ return c && String(c.id) !== courseId; }));
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
-    toast("Course deleted.");
-    return false;
-  };
-
-  window.deleteCourseEmployee = function(empId){
-    empId = String(empId);
-    saveEmployees(employees().map(normalizeEmployee).filter(function(e){ return e && String(e.id) !== empId; }));
-    saveCourses(courses().map(normalizeCourse).filter(function(c){ return c && String(c.empId) !== empId; }));
-
-    if(String(currentEmpId()) === empId){
-      localStorage.removeItem(CURRENT_KEY);
-      var area = $("cr-course-area");
-      var noFile = $("cr-no-file");
-      if(area) area.style.display = "none";
-      if(noFile) noFile.style.display = "block";
-    }
-
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
-    toast("Employee deleted.");
-    return false;
-  };
-
-  window.renderCourseEmployees = renderCourseEmployeesFinal;
-  function renderCourseEmployeesFinal(){
-    var listEl = $("cr-employee-list");
-    var countEl = $("cr-employee-count");
+  function renderEmployees(){
+    var listEl = $("crx-employee-list");
+    var countEl = $("crx-count");
     if(!listEl) return;
 
-    var search = clean($("cr-employee-search") && $("cr-employee-search").value).toLowerCase();
-    var all = employees().map(normalizeEmployee).filter(Boolean);
-    var shown = all.filter(function(e){ return !search || clean(e.name).toLowerCase().includes(search); });
-
+    var all = employees();
     if(countEl) countEl.textContent = String(all.length);
+    var q = clean($("crx-search") && $("crx-search").value).toLowerCase();
+    var shown = all.filter(function(e){ return !q || e.name.toLowerCase().indexOf(q) !== -1; });
 
     if(!shown.length){
-      listEl.innerHTML = '<div class="simple-empty">No employees saved yet.</div>';
+      listEl.innerHTML = '<div class="crx-empty" style="margin-top:10px">No employees saved yet.</div>';
       return;
     }
 
-    var selected = currentEmpId();
-
+    var sid = selectedId();
     listEl.innerHTML = shown.map(function(e){
-      var count = getCoursesForEmp(e.id).length;
-      var active = String(e.id) === String(selected) ? " active-employee" : "";
-      return '<div class="employee-file' + active + '" data-emp-id="' + esc(e.id) + '">' +
+      var count = courses().filter(function(c){ return String(c.empId) === String(e.id); }).length;
+      var active = String(e.id) === String(sid) ? " active" : "";
+      return '<div class="crx-employee' + active + '" data-emp-id="' + esc(e.id) + '">' +
         '<div><strong>' + esc(e.name) + '</strong><small>' + count + ' course(s)</small></div>' +
-        '<div style="display:grid;gap:8px;min-width:92px;">' +
-          '<button class="emp-open-btn" type="button" data-course-action="open" data-emp-id="' + esc(e.id) + '">Open</button>' +
-          '<button class="emp-del-btn" type="button" data-course-action="delete-emp" data-emp-id="' + esc(e.id) + '">Delete</button>' +
+        '<div class="crx-actions">' +
+          '<button type="button" class="crx-btn" data-open="' + esc(e.id) + '">Open</button>' +
+          '<button type="button" class="crx-btn danger" data-delete-emp="' + esc(e.id) + '">Delete</button>' +
         '</div>' +
       '</div>';
     }).join("");
 
-    listEl.querySelectorAll(".employee-file").forEach(function(card){
-      card.onclick = function(e){
-        if(e && e.target && e.target.closest("button")) return;
-        return openCourseEmployeeFinal(card.getAttribute("data-emp-id"));
-      };
+    listEl.querySelectorAll(".crx-employee").forEach(function(card){
+      card.addEventListener("click", function(e){
+        if(e.target.closest("button")) return;
+        openProfile(card.getAttribute("data-emp-id"));
+      });
     });
-
-    listEl.querySelectorAll("button[data-course-action]").forEach(function(btn){
-      btn.onclick = function(e){
-        if(e){ e.preventDefault(); e.stopPropagation(); }
-        var action = btn.getAttribute("data-course-action");
-        var id = btn.getAttribute("data-emp-id");
-        if(action === "open") return openCourseEmployeeFinal(id);
-        if(action === "delete-emp") return window.deleteCourseEmployee(id);
-        return false;
-      };
+    listEl.querySelectorAll("[data-open]").forEach(function(btn){
+      btn.addEventListener("click", function(e){ e.preventDefault(); e.stopPropagation(); openProfile(btn.getAttribute("data-open")); });
+    });
+    listEl.querySelectorAll("[data-delete-emp]").forEach(function(btn){
+      btn.addEventListener("click", function(e){ e.preventDefault(); e.stopPropagation(); deleteEmployee(btn.getAttribute("data-delete-emp")); });
     });
   }
 
-  window.renderEmployeeCourses = renderEmployeeCoursesFinal;
-  function renderEmployeeCoursesFinal(){
-    var area = $("cr-course-area");
-    var noFile = $("cr-no-file");
-    var summary = $("cr-file-summary");
-    var listEl = $("cr-courses-list");
+  function renderProfile(){
+    var holder = $("crx-profile-content");
+    if(!holder) return;
 
-    var emp = currentEmployee();
+    var emp = empById(selectedId());
     if(!emp){
-      if(area) area.style.display = "none";
-      if(noFile) noFile.style.display = "block";
+      holder.className = "crx-empty";
+      holder.innerHTML = "Add or open an employee profile first.";
       return;
     }
 
-    if(area) area.style.display = "block";
-    if(noFile) noFile.style.display = "none";
+    holder.className = "";
+    var list = courses().filter(function(c){ return String(c.empId) === String(emp.id); })
+      .sort(function(a,b){ return String(a.expiry).localeCompare(String(b.expiry)); });
 
-    var list = getCoursesForEmp(emp.id).sort(function(a,b){
-      return String(a.expiry || "").localeCompare(String(b.expiry || ""));
-    });
-
-    var valid = 0, action = 0, expired = 0;
+    var valid=0, soon=0, expired=0;
     list.forEach(function(c){
-      var cls = statusFor(c.expiry).cls;
-      if(cls === "ok") valid++;
-      if(cls === "soon") action++;
-      if(cls === "expired") expired++;
+      var st = statusFor(c.expiry).cls;
+      if(st === "ok") valid++;
+      if(st === "soon") soon++;
+      if(st === "expired") expired++;
     });
 
-    if(summary){
-      summary.innerHTML =
-        '<div class="courses-header-card">' +
-          '<div class="courses-header-top">' +
-            '<div><h3>' + esc(emp.name) + '</h3><small>Employee Course Profile</small></div>' +
-            '<span class="auto-save-pill">Auto Save</span>' +
-          '</div>' +
-          '<div class="courses-file-header">' +
-            '<div class="course-summary-tile employee"><div class="tile-label">Employee</div><div class="tile-value">' + esc(emp.name) + '</div></div>' +
-            '<div class="course-summary-tile"><div class="tile-label">Total</div><div class="tile-value">' + list.length + '</div></div>' +
-            '<div class="course-summary-tile"><div class="tile-label">Valid</div><div class="tile-value">' + valid + '</div></div>' +
-            '<div class="course-summary-tile"><div class="tile-label">Need Action</div><div class="tile-value">' + (action + expired) + '</div></div>' +
-          '</div>' +
-        '</div>';
-    }
+    holder.innerHTML =
+      '<div class="crx-title"><div><h3>' + esc(emp.name) + '</h3><small>Courses saved inside this profile.</small></div><button id="crx-toggle-form" class="crx-btn" type="button">+ Add Course</button></div>' +
+      '<div class="crx-summary">' +
+        '<div class="crx-tile"><span>Total</span><b>' + list.length + '</b></div>' +
+        '<div class="crx-tile"><span>Valid</span><b>' + valid + '</b></div>' +
+        '<div class="crx-tile"><span>Need Action</span><b>' + soon + '</b></div>' +
+        '<div class="crx-tile"><span>Expired</span><b>' + expired + '</b></div>' +
+      '</div>' +
+      '<div id="crx-course-form" style="display:none;margin-bottom:12px">' +
+        '<div class="crx-formgrid">' +
+          '<div class="crx-field"><label>Course Name</label><input id="crx-course-name" class="crx-input" type="text" placeholder="H2S / First Aid"></div>' +
+          '<div class="crx-field"><label>Expiry Date</label><input id="crx-expiry-date" class="crx-input" type="date"></div>' +
+          '<div class="crx-field"><label>Category</label><select id="crx-category" class="crx-select"></select></div>' +
+        '</div>' +
+        '<div class="crx-category-row"><input id="crx-new-category" class="crx-input" type="text" placeholder="Add new category"><button id="crx-add-category" class="crx-btn secondary" type="button">Add Category</button></div>' +
+        '<div class="crx-row" style="margin-top:10px"><button id="crx-save-course" class="crx-btn" type="button">Save Course</button><button id="crx-cancel-course" class="crx-btn secondary" type="button">Cancel</button></div>' +
+      '</div>' +
+      '<div id="crx-course-list"></div>';
 
-    if(!listEl) return;
+    $("crx-toggle-form").addEventListener("click", function(){
+      var form = $("crx-course-form");
+      form.style.display = form.style.display === "none" ? "block" : "none";
+      fillCategorySelect();
+      setTimeout(function(){ var n=$("crx-course-name"); if(n) n.focus(); }, 50);
+    });
+    $("crx-cancel-course").addEventListener("click", function(){ $("crx-course-form").style.display = "none"; });
+    $("crx-save-course").addEventListener("click", saveCourse);
+    $("crx-add-category").addEventListener("click", addCategory);
+    fillCategorySelect();
+    renderCourseList(list);
+  }
+
+  function fillCategorySelect(){
+    var sel = $("crx-category");
+    if(!sel) return;
+    var old = sel.value;
+    sel.innerHTML = categories().map(function(c){ return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join("");
+    if(old) sel.value = old;
+  }
+
+  function addCategory(){
+    var input = $("crx-new-category");
+    var val = clean(input && input.value);
+    if(!val) return false;
+    var custom = load(CAT_KEY);
+    if(!custom.some(function(c){ return clean(c).toLowerCase() === val.toLowerCase(); })){
+      custom.push(val);
+      save(CAT_KEY, custom);
+    }
+    if(input) input.value = "";
+    fillCategorySelect();
+    var sel = $("crx-category");
+    if(sel) sel.value = val;
+    setMsg("Category added.");
+    return false;
+  }
+
+  function saveCourse(){
+    var emp = empById(selectedId());
+    if(!emp){ setMsg("Open employee profile first."); return false; }
+
+    var name = clean($("crx-course-name") && $("crx-course-name").value);
+    var expiry = clean($("crx-expiry-date") && $("crx-expiry-date").value);
+    var category = clean($("crx-category") && $("crx-category").value) || "Other";
+
+    if(!name){ setMsg("Enter course name."); $("crx-course-name").focus(); return false; }
+    if(!expiry){ setMsg("Enter expiry date."); $("crx-expiry-date").focus(); return false; }
+
+    var list = courses();
+    list.push({
+      id:uid("course"),
+      empId:String(emp.id),
+      employeeId:String(emp.id),
+      employeeName:emp.name,
+      name:name,
+      expiry:expiry,
+      category:category,
+      createdAt:new Date().toISOString()
+    });
+    saveCourses(list);
+
+    setMsg("Course saved.");
+    renderAll();
+    return false;
+  }
+
+  function deleteCourse(id){
+    id = String(id || "");
+    saveCourses(courses().filter(function(c){ return String(c.id) !== id; }));
+    renderAll();
+    setMsg("Course deleted.");
+    return false;
+  }
+
+  function renderCourseList(list){
+    var el = $("crx-course-list");
+    if(!el) return;
 
     if(!list.length){
-      listEl.innerHTML = '<div class="simple-empty">No courses saved for this employee yet. Press + to add course.</div>';
+      el.innerHTML = '<div class="crx-empty">No courses saved for this employee yet. Press + Add Course.</div>';
       return;
     }
 
@@ -10653,94 +10594,70 @@ function initDailyJobLog(){
       grouped[key].push(c);
     });
 
-    listEl.innerHTML = Object.keys(grouped).sort().map(function(cat){
-      var items = grouped[cat].map(function(c){
+    el.innerHTML = Object.keys(grouped).sort().map(function(cat){
+      return '<div class="report-subtitle">' + esc(cat) + '</div>' + grouped[cat].map(function(c){
         var st = statusFor(c.expiry);
-        return '<div class="course-file">' +
+        return '<div class="crx-course">' +
           '<strong>' + esc(c.name) + '</strong>' +
-          '<small>Expiry: ' + esc(formatDate(c.expiry)) + '</small>' +
-          '<span class="status-pill ' + st.cls + '">' + esc(st.text) + '</span>' +
-          '<div class="course-actions">' +
-            '<button class="added-btn danger" type="button" data-delete-course-id="' + esc(c.id) + '">Delete</button>' +
-          '</div>' +
+          '<small>Expiry: ' + esc(fmtDate(c.expiry)) + '</small>' +
+          '<span class="crx-pill ' + st.cls + '">' + esc(st.text) + '</span>' +
+          '<div style="margin-top:10px"><button type="button" class="crx-btn danger" data-delete-course="' + esc(c.id) + '">Delete</button></div>' +
         '</div>';
       }).join("");
-      return '<div class="report-subtitle">' + esc(cat) + '</div>' + items;
     }).join("");
 
-    listEl.querySelectorAll("[data-delete-course-id]").forEach(function(btn){
-      btn.onclick = function(e){
-        if(e){ e.preventDefault(); e.stopPropagation(); }
-        return window.deleteEmployeeCourse(btn.getAttribute("data-delete-course-id"));
-      };
+    el.querySelectorAll("[data-delete-course]").forEach(function(btn){
+      btn.addEventListener("click", function(e){ e.preventDefault(); e.stopPropagation(); deleteCourse(btn.getAttribute("data-delete-course")); });
     });
   }
 
-  function bindCoursesFinal(){
-    fillCategorySelect();
-
-    var addEmpBtn = document.querySelector("#page-courses button[onclick*='addEmployeeOnlyProfile']");
-    if(addEmpBtn){
-      addEmpBtn.onclick = function(e){
-        if(e){ e.preventDefault(); e.stopPropagation(); }
-        return window.addEmployeeOnlyProfile();
-      };
-    }
-
-    var saveBtn = document.querySelector("#page-courses button[onclick*='addEmployeeCourse']");
-    if(saveBtn){
-      saveBtn.onclick = function(e){
-        if(e){ e.preventDefault(); e.stopPropagation(); }
-        return window.addEmployeeCourse();
-      };
-      saveBtn.setAttribute("data-fixed-save-course", "1");
-    }
-
-    var catBtn = document.querySelector("#page-courses button[onclick*='addCourseCategory']");
-    if(catBtn){
-      catBtn.onclick = function(e){
-        if(e){ e.preventDefault(); e.stopPropagation(); }
-        return window.addCourseCategory();
-      };
-    }
-
-    var empInput = $("cr-employee-name");
-    if(empInput){
-      empInput.onkeydown = function(e){
-        if(e.key === "Enter"){
-          e.preventDefault();
-          return window.addEmployeeOnlyProfile();
-        }
-      };
-    }
-
-    var search = $("cr-employee-search");
-    if(search) search.oninput = renderCourseEmployeesFinal;
-
-    saveNormalized();
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
+  function renderAll(){
+    renderEmployees();
+    renderProfile();
   }
+
+  function init(){
+    var page = $("page-courses");
+    if(!page) return;
+    normalizeSave();
+    if(!empById(selectedId()) && employees().length) setSelected(employees()[0].id);
+    buildCoursesPage();
+    renderAll();
+  }
+
+  // Compatibility: keep old function names working too.
+  window.addEmployeeOnlyProfile = addEmployee;
+  window.addEmployeeCourse = saveCourse;
+  window.renderCourseEmployees = renderEmployees;
+  window.renderEmployeeCourses = renderProfile;
+  window.deleteEmployeeCourse = deleteCourse;
+  window.deleteCourseEmployee = deleteEmployee;
+  window.openCourseEmployee = openProfile;
+  window.openEmployeeProfile = openProfile;
+  window.selectCourseEmployee = openProfile;
+  window.toggleProfileCourseForm = function(){ 
+    var btn = $("crx-toggle-form");
+    if(btn) btn.click();
+    return false;
+  };
+  window.addCourseCategory = addCategory;
 
   document.addEventListener("click", function(e){
     var btn = e.target && e.target.closest ? e.target.closest("button") : null;
     if(!btn || !btn.closest("#page-courses")) return;
-
     var txt = clean(btn.textContent).toLowerCase();
     var oc = btn.getAttribute("onclick") || "";
-
-    if(txt === "save course" || oc.indexOf("addEmployeeCourse") !== -1 || btn.getAttribute("data-fixed-save-course") === "1"){
+    if(txt === "save course" || oc.indexOf("addEmployeeCourse") !== -1){
       e.preventDefault();
-      e.stopPropagation();
-      return window.addEmployeeCourse();
+      e.stopImmediatePropagation();
+      saveCourse();
     }
   }, true);
 
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", bindCoursesFinal);
-  else bindCoursesFinal();
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
 
-  setTimeout(bindCoursesFinal, 300);
-  setTimeout(bindCoursesFinal, 1000);
+  setTimeout(init, 500);
 })();
 </script>
 
