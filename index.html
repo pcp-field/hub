@@ -10135,490 +10135,6 @@ function initDailyJobLog(){
 </style>
 
 
-<script id="ahmed-save-course-final-force-fix">
-(function () {
-  "use strict";
-
-  function $(id){ return document.getElementById(id); }
-  function clean(v){ return String(v == null ? "" : v).trim(); }
-  function uid(prefix){ return (prefix || "id") + "_" + Date.now() + "_" + Math.random().toString(16).slice(2); }
-
-  var EMP_KEY = "crEmployees";
-  var COURSE_KEY = "crCourses";
-  var CAT_KEY = "crCategories";
-  var CURRENT_KEY = "crCurrentEmployeeId";
-  var DEFAULT_CATEGORIES = ["HSE","Driving","Technical","OPAL","Safety","Medical","Well Control","Other"];
-
-  function toast(msg){
-    var t = $("toast");
-    if(!t){
-      t = document.createElement("div");
-      t.id = "toast";
-      t.className = "toast";
-      document.body.appendChild(t);
-    }
-    t.textContent = msg || "";
-    t.classList.add("show");
-    clearTimeout(window.__courseToastTimer);
-    window.__courseToastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2200);
-  }
-
-  function html(v){
-    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
-      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
-    });
-  }
-
-  function loadArray(key){
-    try{
-      var v = JSON.parse(localStorage.getItem(key) || "[]");
-      return Array.isArray(v) ? v : [];
-    }catch(e){ return []; }
-  }
-  function saveArray(key, value){
-    localStorage.setItem(key, JSON.stringify(value || []));
-  }
-
-  function employees(){ return loadArray(EMP_KEY); }
-  function courses(){ return loadArray(COURSE_KEY); }
-  function saveEmployees(v){ saveArray(EMP_KEY, v); }
-  function saveCourses(v){ saveArray(COURSE_KEY, v); }
-
-  function currentEmpId(){ return clean(localStorage.getItem(CURRENT_KEY) || ""); }
-  function setCurrentEmpId(id){ localStorage.setItem(CURRENT_KEY, clean(id)); }
-
-  function empById(id){
-    id = clean(id);
-    return employees().find(function(e){ return String(e.id) === id; }) || null;
-  }
-
-  function ensureCurrentEmployee(){
-    var id = currentEmpId();
-    var emp = empById(id);
-    if(emp) return emp;
-
-    var list = employees();
-    if(list.length){
-      emp = list[0];
-      setCurrentEmpId(emp.id);
-      return emp;
-    }
-    return null;
-  }
-
-  function categories(){
-    var custom = loadArray(CAT_KEY);
-    var all = DEFAULT_CATEGORIES.concat(custom);
-    var seen = {};
-    return all.filter(function(c){
-      c = clean(c);
-      var k = c.toLowerCase();
-      if(!c || seen[k]) return false;
-      seen[k] = true;
-      return true;
-    });
-  }
-
-  function fillCategorySelect(){
-    var sel = $("cr-category");
-    if(!sel) return;
-    var old = sel.value;
-    sel.innerHTML = categories().map(function(c){
-      return '<option value="' + html(c) + '">' + html(c) + '</option>';
-    }).join("");
-    if(old) sel.value = old;
-  }
-
-  window.addCourseCategory = function(){
-    var input = $("cr-new-category");
-    var value = clean(input && input.value);
-    if(!value) return false;
-
-    var custom = loadArray(CAT_KEY);
-    if(!custom.some(function(c){ return clean(c).toLowerCase() === value.toLowerCase(); })){
-      custom.push(value);
-      saveArray(CAT_KEY, custom);
-    }
-
-    if(input) input.value = "";
-    fillCategorySelect();
-    var sel = $("cr-category");
-    if(sel) sel.value = value;
-    toast("Category added.");
-    return false;
-  };
-
-  window.addEmployeeOnlyProfile = function(){
-    var input = $("cr-employee-name");
-    var name = clean(input && input.value);
-    if(!name){
-      toast("Enter employee name.");
-      return false;
-    }
-
-    var list = employees();
-    var emp = list.find(function(e){ return clean(e.name).toLowerCase() === name.toLowerCase(); });
-    if(!emp){
-      emp = { id: uid("emp"), name: name, createdAt: new Date().toISOString() };
-      list.push(emp);
-      saveEmployees(list);
-    }
-
-    if(input) input.value = "";
-    setCurrentEmpId(emp.id);
-    renderCourseEmployeesFinal();
-    openEmployeeProfileFinal(emp.id);
-    toast("Employee saved.");
-    return false;
-  };
-
-  function statusFor(dateStr){
-    if(!dateStr) return { text:"No expiry", cls:"soon" };
-    var today = new Date(); today.setHours(0,0,0,0);
-    var d = new Date(dateStr + "T00:00:00");
-    var diff = Math.ceil((d - today) / 86400000);
-    if(diff < 0) return { text:"Expired " + Math.abs(diff) + " day(s) ago", cls:"expired" };
-    if(diff <= 30) return { text:"Need Action: " + diff + " day(s) left", cls:"soon" };
-    return { text:"Valid: " + diff + " day(s) left", cls:"ok" };
-  }
-
-  function formatDate(dateStr){
-    if(!dateStr) return "-";
-    try{ return new Date(dateStr + "T00:00:00").toLocaleDateString(); }catch(e){ return dateStr; }
-  }
-
-  function openEmployeeProfileFinal(id){
-    var emp = empById(id);
-    if(!emp) return false;
-
-    setCurrentEmpId(emp.id);
-    var area = $("cr-course-area");
-    var noFile = $("cr-no-file");
-    if(area) area.style.display = "block";
-    if(noFile) noFile.style.display = "none";
-
-    fillCategorySelect();
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
-    return false;
-  }
-
-  window.openEmployeeProfile = openEmployeeProfileFinal;
-  window.openCourseEmployee = openEmployeeProfileFinal;
-  window.selectCourseEmployee = openEmployeeProfileFinal;
-
-  window.toggleProfileCourseForm = function(force){
-    var form = $("cr-profile-course-form");
-    if(!form) return false;
-
-    var emp = ensureCurrentEmployee();
-    if(!emp){
-      toast("Add employee first.");
-      return false;
-    }
-
-    fillCategorySelect();
-    var show = typeof force === "boolean" ? force : (form.style.display === "none" || !form.style.display);
-    form.style.display = show ? "block" : "none";
-    return false;
-  };
-
-  window.addEmployeeCourse = function(){
-    var emp = ensureCurrentEmployee();
-    if(!emp){
-      toast("Open employee profile first.");
-      return false;
-    }
-
-    var nameEl = $("cr-course-name");
-    var dateEl = $("cr-expiry-date");
-    var catEl = $("cr-category");
-
-    var courseName = clean(nameEl && nameEl.value);
-    var expiry = clean(dateEl && dateEl.value);
-    var category = clean(catEl && catEl.value) || "Other";
-
-    if(!courseName){
-      toast("Enter course name.");
-      if(nameEl) nameEl.focus();
-      return false;
-    }
-    if(!expiry){
-      toast("Enter expiry date.");
-      if(dateEl) dateEl.focus();
-      return false;
-    }
-
-    var list = courses();
-    list.push({
-      id: uid("course"),
-      empId: emp.id,
-      employeeName: emp.name,
-      name: courseName,
-      expiry: expiry,
-      category: category,
-      createdAt: new Date().toISOString()
-    });
-    saveCourses(list);
-
-    if(nameEl) nameEl.value = "";
-    if(dateEl) dateEl.value = "";
-    var form = $("cr-profile-course-form");
-    if(form) form.style.display = "none";
-
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
-    toast("Course saved.");
-    return false;
-  };
-
-  window.deleteEmployeeCourse = function(courseId){
-    saveCourses(courses().filter(function(c){ return String(c.id) !== String(courseId); }));
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
-    toast("Course deleted.");
-    return false;
-  };
-
-  window.deleteCourseEmployee = function(empId){
-    empId = clean(empId);
-    saveEmployees(employees().filter(function(e){ return String(e.id) !== empId; }));
-    saveCourses(courses().filter(function(c){ return String(c.empId) !== empId; }));
-
-    if(currentEmpId() === empId){
-      localStorage.removeItem(CURRENT_KEY);
-      var area = $("cr-course-area");
-      var noFile = $("cr-no-file");
-      if(area) area.style.display = "none";
-      if(noFile) noFile.style.display = "block";
-    }
-
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
-    toast("Employee deleted.");
-    return false;
-  };
-
-  window.copyEmployeeCourseFile = function(){
-    var emp = ensureCurrentEmployee();
-    if(!emp) return false;
-
-    var list = courses().filter(function(c){ return String(c.empId) === String(emp.id); });
-    var text = ["Employee Course File", "Employee: " + emp.name, "Total Courses: " + list.length, ""];
-    list.forEach(function(c, i){
-      text.push((i+1) + ". " + c.name);
-      text.push("Category: " + (c.category || "Other"));
-      text.push("Expiry: " + (c.expiry || "-"));
-      text.push("Status: " + statusFor(c.expiry).text);
-      text.push("");
-    });
-
-    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text.join("\\n"));
-    toast("Copied.");
-    return false;
-  };
-
-  window.shareEmployeeCourseFile = function(){
-    var emp = ensureCurrentEmployee();
-    if(!emp) return false;
-
-    var list = courses().filter(function(c){ return String(c.empId) === String(emp.id); });
-    var text = ["Employee Course File", "Employee: " + emp.name, "Total Courses: " + list.length, ""];
-    list.forEach(function(c, i){
-      text.push((i+1) + ". " + c.name);
-      text.push("Category: " + (c.category || "Other"));
-      text.push("Expiry: " + (c.expiry || "-"));
-      text.push("Status: " + statusFor(c.expiry).text);
-      text.push("");
-    });
-
-    var msg = text.join("\\n");
-    if(navigator.share) navigator.share({ text: msg }).catch(function(){});
-    else if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(msg);
-    toast("Share opened.");
-    return false;
-  };
-
-  function renderCourseEmployeesFinal(){
-    var listEl = $("cr-employee-list");
-    var countEl = $("cr-employee-count");
-    if(!listEl) return;
-
-    var search = clean($("cr-employee-search") && $("cr-employee-search").value).toLowerCase();
-    var all = employees();
-    var list = all.filter(function(e){ return !search || clean(e.name).toLowerCase().includes(search); });
-
-    if(countEl) countEl.textContent = String(all.length);
-
-    if(!list.length){
-      listEl.innerHTML = '<div class="simple-empty">No employees saved yet.</div>';
-      return;
-    }
-
-    var selected = currentEmpId();
-    listEl.innerHTML = list.map(function(e){
-      var count = courses().filter(function(c){ return String(c.empId) === String(e.id); }).length;
-      var active = String(e.id) === String(selected) ? " active-employee" : "";
-      return '' +
-        '<div class="employee-file' + active + '" data-emp-id="' + html(e.id) + '">' +
-          '<div><strong>' + html(e.name) + '</strong><small>' + count + ' course(s)</small></div>' +
-          '<div style="display:grid;gap:8px;min-width:92px;">' +
-            '<button class="emp-open-btn" type="button" data-course-action="open" data-emp-id="' + html(e.id) + '">Open</button>' +
-            '<button class="emp-del-btn" type="button" data-course-action="delete-emp" data-emp-id="' + html(e.id) + '">Delete</button>' +
-          '</div>' +
-        '</div>';
-    }).join("");
-
-    listEl.querySelectorAll(".employee-file").forEach(function(card){
-      card.onclick = function(e){
-        if(e && e.target && e.target.closest("button")) return;
-        return openEmployeeProfileFinal(card.getAttribute("data-emp-id"));
-      };
-    });
-
-    listEl.querySelectorAll("button[data-course-action]").forEach(function(btn){
-      btn.onclick = function(e){
-        if(e){ e.preventDefault(); e.stopPropagation(); }
-        var action = btn.getAttribute("data-course-action");
-        var id = btn.getAttribute("data-emp-id");
-        if(action === "open") return openEmployeeProfileFinal(id);
-        if(action === "delete-emp") return window.deleteCourseEmployee(id);
-        return false;
-      };
-    });
-  }
-
-  window.renderCourseEmployees = renderCourseEmployeesFinal;
-
-  function renderEmployeeCoursesFinal(){
-    var area = $("cr-course-area");
-    var noFile = $("cr-no-file");
-    var summary = $("cr-file-summary");
-    var listEl = $("cr-courses-list");
-    var emp = ensureCurrentEmployee();
-
-    if(!emp){
-      if(area) area.style.display = "none";
-      if(noFile) noFile.style.display = "block";
-      return;
-    }
-
-    if(area) area.style.display = "block";
-    if(noFile) noFile.style.display = "none";
-
-    var list = courses()
-      .filter(function(c){ return String(c.empId) === String(emp.id); })
-      .sort(function(a,b){ return String(a.expiry || "").localeCompare(String(b.expiry || "")); });
-
-    var valid = 0, action = 0, expired = 0;
-    list.forEach(function(c){
-      var st = statusFor(c.expiry).cls;
-      if(st === "ok") valid++;
-      if(st === "soon") action++;
-      if(st === "expired") expired++;
-    });
-
-    if(summary){
-      summary.innerHTML = '' +
-        '<div class="courses-header-card">' +
-          '<div class="courses-header-top">' +
-            '<div><h3>' + html(emp.name) + '</h3><small>Employee Course Profile</small></div>' +
-            '<span class="auto-save-pill">Auto Save</span>' +
-          '</div>' +
-          '<div class="courses-file-header">' +
-            '<div class="course-summary-tile employee"><div class="tile-label">Employee</div><div class="tile-value">' + html(emp.name) + '</div></div>' +
-            '<div class="course-summary-tile"><div class="tile-label">Total</div><div class="tile-value">' + list.length + '</div></div>' +
-            '<div class="course-summary-tile"><div class="tile-label">Valid</div><div class="tile-value">' + valid + '</div></div>' +
-            '<div class="course-summary-tile"><div class="tile-label">Need Action</div><div class="tile-value">' + (action + expired) + '</div></div>' +
-          '</div>' +
-        '</div>';
-    }
-
-    if(!listEl) return;
-
-    if(!list.length){
-      listEl.innerHTML = '<div class="simple-empty">No courses saved for this employee yet. Press + to add course.</div>';
-      return;
-    }
-
-    var grouped = {};
-    list.forEach(function(c){
-      var key = c.category || "Other";
-      if(!grouped[key]) grouped[key] = [];
-      grouped[key].push(c);
-    });
-
-    listEl.innerHTML = Object.keys(grouped).sort().map(function(cat){
-      var items = grouped[cat].map(function(c){
-        var st = statusFor(c.expiry);
-        return '' +
-          '<div class="course-file">' +
-            '<strong>' + html(c.name) + '</strong>' +
-            '<small>Expiry: ' + html(formatDate(c.expiry)) + '</small>' +
-            '<span class="status-pill ' + st.cls + '">' + html(st.text) + '</span>' +
-            '<div class="course-actions">' +
-              '<button class="added-btn danger" type="button" onclick="deleteEmployeeCourse(\\'' + c.id + '\\')">Delete</button>' +
-            '</div>' +
-          '</div>';
-      }).join("");
-      return '<div class="report-subtitle">' + html(cat) + '</div>' + items;
-    }).join("");
-  }
-
-  window.renderEmployeeCourses = renderEmployeeCoursesFinal;
-
-  function bindCourseButtons(){
-    fillCategorySelect();
-
-    var addEmpBtn = document.querySelector("#page-courses button[onclick*='addEmployeeOnlyProfile']");
-    if(addEmpBtn) addEmpBtn.onclick = function(e){ if(e){e.preventDefault();e.stopPropagation();} return window.addEmployeeOnlyProfile(); };
-
-    var saveCourseBtn = document.querySelector("#page-courses button[onclick*='addEmployeeCourse']");
-    if(saveCourseBtn) saveCourseBtn.onclick = function(e){ if(e){e.preventDefault();e.stopPropagation();} return window.addEmployeeCourse(); };
-
-    var addCatBtn = document.querySelector("#page-courses button[onclick*='addCourseCategory']");
-    if(addCatBtn) addCatBtn.onclick = function(e){ if(e){e.preventDefault();e.stopPropagation();} return window.addCourseCategory(); };
-
-    var empInput = $("cr-employee-name");
-    if(empInput) empInput.onkeydown = function(e){
-      if(e.key === "Enter"){ e.preventDefault(); window.addEmployeeOnlyProfile(); }
-    };
-
-    var search = $("cr-employee-search");
-    if(search) search.oninput = renderCourseEmployeesFinal;
-
-    renderCourseEmployeesFinal();
-    renderEmployeeCoursesFinal();
-  }
-
-  /* Extra strong click capture for Save Course in iOS/Safari/WebView */
-  document.addEventListener("click", function(e){
-    var target = e.target && e.target.closest ? e.target.closest("button") : null;
-    if(!target || !target.closest("#page-courses")) return;
-
-    var text = clean(target.textContent).toLowerCase();
-    var onclick = target.getAttribute("onclick") || "";
-
-    if(text === "save course" || onclick.indexOf("addEmployeeCourse") !== -1){
-      e.preventDefault();
-      e.stopPropagation();
-      window.addEmployeeCourse();
-    }
-  }, true);
-
-  function init(){
-    bindCourseButtons();
-  }
-
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
-  else init();
-
-  setTimeout(init, 400);
-  setTimeout(init, 1200);
-})();
-</script>
-
-
 <style id="ahmed-pill-transparency-level-final">
   /* Match the requested lower transparency / darker glass badge level */
   #page-home .home-pill,
@@ -10645,6 +10161,588 @@ function initDailyJobLog(){
     }
   }
 </style>
+
+
+<style id="ahmed-pill-left-bottom-final">
+  /* Move PCP Field Service Toolkit badge to left-bottom inside the home hero */
+  #page-home .home-hero,
+  .home-hero {
+    position: relative !important;
+  }
+
+  #page-home .home-hero-content,
+  .home-hero-content {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    z-index: 3 !important;
+    pointer-events: none !important;
+  }
+
+  #page-home .home-pill,
+  .home-pill {
+    position: absolute !important;
+    left: 18px !important;
+    bottom: 18px !important;
+    top: auto !important;
+    right: auto !important;
+    transform: none !important;
+    pointer-events: auto !important;
+  }
+
+  @media (max-width: 720px) {
+    #page-home .home-pill,
+    .home-pill {
+      left: 14px !important;
+      bottom: 14px !important;
+      top: auto !important;
+      transform: none !important;
+    }
+  }
+</style>
+
+
+<script id="ahmed-save-course-working-final">
+(function(){
+  "use strict";
+
+  function $(id){ return document.getElementById(id); }
+  function clean(v){ return String(v == null ? "" : v).trim(); }
+  function uid(prefix){ return (prefix || "id") + "_" + Date.now() + "_" + Math.random().toString(16).slice(2); }
+
+  var EMP_KEY = "crEmployees";
+  var COURSE_KEY = "crCourses";
+  var CAT_KEY = "crCategories";
+  var CURRENT_KEY = "crCurrentEmployeeId";
+  var DEFAULT_CATEGORIES = ["HSE","Driving","Technical","OPAL","Safety","Medical","Well Control","Other"];
+
+  function esc(v){
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function toast(msg){
+    var t = $("toast");
+    if(!t){
+      t = document.createElement("div");
+      t.id = "toast";
+      t.className = "toast";
+      document.body.appendChild(t);
+    }
+    t.textContent = msg || "";
+    t.classList.add("show");
+    clearTimeout(window.__saveCourseToastTimer);
+    window.__saveCourseToastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2200);
+  }
+
+  function loadArray(key){
+    try{
+      var v = JSON.parse(localStorage.getItem(key) || "[]");
+      return Array.isArray(v) ? v : [];
+    }catch(e){
+      return [];
+    }
+  }
+
+  function saveArray(key, value){
+    try{ localStorage.setItem(key, JSON.stringify(value || [])); }catch(e){}
+  }
+
+  function employees(){ return loadArray(EMP_KEY); }
+  function courses(){ return loadArray(COURSE_KEY); }
+  function saveEmployees(list){ saveArray(EMP_KEY, list); }
+  function saveCourses(list){ saveArray(COURSE_KEY, list); }
+
+  function normalizeEmployee(emp){
+    if(!emp) return null;
+    if(!emp.id) emp.id = uid("emp");
+    emp.id = String(emp.id);
+    emp.name = clean(emp.name || emp.employeeName || emp.fullName || "Employee");
+    return emp;
+  }
+
+  function normalizeCourse(course){
+    if(!course) return null;
+    if(!course.id) course.id = uid("course");
+    course.id = String(course.id);
+    var eid = clean(course.empId || course.employeeId || course.employeeID || course.employee_id);
+    course.empId = eid;
+    course.employeeId = eid;
+    course.name = clean(course.name || course.courseName || "Course");
+    course.expiry = clean(course.expiry || course.expiryDate || course.date || "");
+    course.category = clean(course.category || "Other");
+    return course;
+  }
+
+  function saveNormalized(){
+    var empList = employees().map(normalizeEmployee).filter(Boolean);
+    saveEmployees(empList);
+    var ids = {};
+    empList.forEach(function(e){ ids[String(e.id)] = true; });
+    var courseList = courses().map(normalizeCourse).filter(function(c){
+      return c && c.empId && ids[String(c.empId)];
+    });
+    saveCourses(courseList);
+  }
+
+  function currentEmpId(){
+    return clean(localStorage.getItem(CURRENT_KEY) || window.crCurrentEmployeeId || "");
+  }
+
+  function setCurrentEmpId(id){
+    id = clean(id);
+    try{ localStorage.setItem(CURRENT_KEY, id); }catch(e){}
+    window.crCurrentEmployeeId = id;
+  }
+
+  function empById(id){
+    id = clean(id);
+    return employees().map(normalizeEmployee).find(function(e){ return String(e.id) === id; }) || null;
+  }
+
+  function currentEmployee(){
+    var emp = empById(currentEmpId());
+    if(emp) return emp;
+
+    var active = document.querySelector("#cr-employee-list .employee-file.active-employee");
+    if(active){
+      emp = empById(active.getAttribute("data-emp-id"));
+      if(emp){
+        setCurrentEmpId(emp.id);
+        return emp;
+      }
+    }
+
+    var list = employees().map(normalizeEmployee).filter(Boolean);
+    if(list.length){
+      setCurrentEmpId(list[0].id);
+      return list[0];
+    }
+
+    return null;
+  }
+
+  function categories(){
+    var custom = loadArray(CAT_KEY);
+    var all = DEFAULT_CATEGORIES.concat(custom);
+    var seen = {};
+    return all.filter(function(c){
+      c = clean(c);
+      var k = c.toLowerCase();
+      if(!c || seen[k]) return false;
+      seen[k] = true;
+      return true;
+    });
+  }
+
+  function fillCategorySelect(){
+    var sel = $("cr-category");
+    if(!sel) return;
+    var old = sel.value;
+    sel.innerHTML = categories().map(function(c){
+      return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
+    }).join("");
+    if(old) sel.value = old;
+  }
+
+  function getCoursesForEmp(empId){
+    empId = String(empId);
+    return courses().map(normalizeCourse).filter(function(c){
+      return c && String(c.empId) === empId;
+    });
+  }
+
+  function statusFor(dateStr){
+    if(!dateStr) return {text:"No expiry", cls:"soon"};
+    var today = new Date();
+    today.setHours(0,0,0,0);
+    var d = new Date(dateStr + "T00:00:00");
+    var diff = Math.ceil((d - today) / 86400000);
+    if(diff < 0) return {text:"Expired " + Math.abs(diff) + " day(s) ago", cls:"expired"};
+    if(diff <= 30) return {text:"Need Action: " + diff + " day(s) left", cls:"soon"};
+    return {text:"Valid: " + diff + " day(s) left", cls:"ok"};
+  }
+
+  function formatDate(dateStr){
+    if(!dateStr) return "-";
+    try{ return new Date(dateStr + "T00:00:00").toLocaleDateString(); }catch(e){ return dateStr; }
+  }
+
+  window.addCourseCategory = function(){
+    var input = $("cr-new-category");
+    var value = clean(input && input.value);
+    if(!value) return false;
+
+    var custom = loadArray(CAT_KEY);
+    if(!custom.some(function(c){ return clean(c).toLowerCase() === value.toLowerCase(); })){
+      custom.push(value);
+      saveArray(CAT_KEY, custom);
+    }
+    if(input) input.value = "";
+    fillCategorySelect();
+    var sel = $("cr-category");
+    if(sel) sel.value = value;
+    toast("Category saved.");
+    return false;
+  };
+
+  window.addEmployeeOnlyProfile = function(){
+    var input = $("cr-employee-name");
+    var name = clean(input && input.value);
+    if(!name){
+      toast("Enter employee name.");
+      if(input) input.focus();
+      return false;
+    }
+
+    var list = employees().map(normalizeEmployee).filter(Boolean);
+    var emp = list.find(function(e){ return clean(e.name).toLowerCase() === name.toLowerCase(); });
+    if(!emp){
+      emp = {id:uid("emp"), name:name, createdAt:new Date().toISOString()};
+      list.push(emp);
+      saveEmployees(list);
+    }
+
+    if(input) input.value = "";
+    setCurrentEmpId(emp.id);
+    renderCourseEmployeesFinal();
+    openCourseEmployeeFinal(emp.id);
+    toast("Employee saved.");
+    return false;
+  };
+
+  function openCourseEmployeeFinal(empId){
+    var emp = empById(empId);
+    if(!emp) return false;
+
+    setCurrentEmpId(emp.id);
+    var area = $("cr-course-area");
+    var noFile = $("cr-no-file");
+    if(area) area.style.display = "block";
+    if(noFile) noFile.style.display = "none";
+
+    fillCategorySelect();
+    renderCourseEmployeesFinal();
+    renderEmployeeCoursesFinal();
+
+    var form = $("cr-profile-course-form");
+    if(form) form.style.display = "none";
+
+    return false;
+  }
+
+  window.openCourseEmployee = openCourseEmployeeFinal;
+  window.openEmployeeProfile = openCourseEmployeeFinal;
+  window.selectCourseEmployee = openCourseEmployeeFinal;
+
+  window.toggleProfileCourseForm = function(force){
+    var form = $("cr-profile-course-form");
+    if(!form) return false;
+
+    var emp = currentEmployee();
+    if(!emp){
+      toast("Add employee first.");
+      return false;
+    }
+
+    var area = $("cr-course-area");
+    var noFile = $("cr-no-file");
+    if(area) area.style.display = "block";
+    if(noFile) noFile.style.display = "none";
+
+    fillCategorySelect();
+
+    var shouldShow = (typeof force === "boolean") ? force : (form.style.display === "none" || !form.style.display);
+    form.style.display = shouldShow ? "block" : "none";
+    return false;
+  };
+
+  window.addEmployeeCourse = function(){
+    saveNormalized();
+
+    var emp = currentEmployee();
+    if(!emp){
+      toast("Open employee profile first.");
+      return false;
+    }
+
+    var nameEl = $("cr-course-name");
+    var dateEl = $("cr-expiry-date");
+    var catEl = $("cr-category");
+
+    var courseName = clean(nameEl && nameEl.value);
+    var expiry = clean(dateEl && dateEl.value);
+    var category = clean(catEl && catEl.value) || "Other";
+
+    if(!courseName){
+      toast("Enter course name.");
+      if(nameEl) nameEl.focus();
+      return false;
+    }
+    if(!expiry){
+      toast("Enter expiry date.");
+      if(dateEl) dateEl.focus();
+      return false;
+    }
+
+    var list = courses().map(normalizeCourse).filter(Boolean);
+    var newCourse = {
+      id: uid("course"),
+      empId: String(emp.id),
+      employeeId: String(emp.id),
+      employeeName: emp.name,
+      name: courseName,
+      expiry: expiry,
+      category: category,
+      createdAt: new Date().toISOString()
+    };
+
+    list.push(newCourse);
+    saveCourses(list);
+
+    if(nameEl) nameEl.value = "";
+    if(dateEl) dateEl.value = "";
+    var form = $("cr-profile-course-form");
+    if(form) form.style.display = "none";
+
+    renderCourseEmployeesFinal();
+    renderEmployeeCoursesFinal();
+    toast("Course saved.");
+    return false;
+  };
+
+  window.deleteEmployeeCourse = function(courseId){
+    courseId = String(courseId);
+    saveCourses(courses().map(normalizeCourse).filter(function(c){ return c && String(c.id) !== courseId; }));
+    renderCourseEmployeesFinal();
+    renderEmployeeCoursesFinal();
+    toast("Course deleted.");
+    return false;
+  };
+
+  window.deleteCourseEmployee = function(empId){
+    empId = String(empId);
+    saveEmployees(employees().map(normalizeEmployee).filter(function(e){ return e && String(e.id) !== empId; }));
+    saveCourses(courses().map(normalizeCourse).filter(function(c){ return c && String(c.empId) !== empId; }));
+
+    if(String(currentEmpId()) === empId){
+      localStorage.removeItem(CURRENT_KEY);
+      var area = $("cr-course-area");
+      var noFile = $("cr-no-file");
+      if(area) area.style.display = "none";
+      if(noFile) noFile.style.display = "block";
+    }
+
+    renderCourseEmployeesFinal();
+    renderEmployeeCoursesFinal();
+    toast("Employee deleted.");
+    return false;
+  };
+
+  window.renderCourseEmployees = renderCourseEmployeesFinal;
+  function renderCourseEmployeesFinal(){
+    var listEl = $("cr-employee-list");
+    var countEl = $("cr-employee-count");
+    if(!listEl) return;
+
+    var search = clean($("cr-employee-search") && $("cr-employee-search").value).toLowerCase();
+    var all = employees().map(normalizeEmployee).filter(Boolean);
+    var shown = all.filter(function(e){ return !search || clean(e.name).toLowerCase().includes(search); });
+
+    if(countEl) countEl.textContent = String(all.length);
+
+    if(!shown.length){
+      listEl.innerHTML = '<div class="simple-empty">No employees saved yet.</div>';
+      return;
+    }
+
+    var selected = currentEmpId();
+
+    listEl.innerHTML = shown.map(function(e){
+      var count = getCoursesForEmp(e.id).length;
+      var active = String(e.id) === String(selected) ? " active-employee" : "";
+      return '<div class="employee-file' + active + '" data-emp-id="' + esc(e.id) + '">' +
+        '<div><strong>' + esc(e.name) + '</strong><small>' + count + ' course(s)</small></div>' +
+        '<div style="display:grid;gap:8px;min-width:92px;">' +
+          '<button class="emp-open-btn" type="button" data-course-action="open" data-emp-id="' + esc(e.id) + '">Open</button>' +
+          '<button class="emp-del-btn" type="button" data-course-action="delete-emp" data-emp-id="' + esc(e.id) + '">Delete</button>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+
+    listEl.querySelectorAll(".employee-file").forEach(function(card){
+      card.onclick = function(e){
+        if(e && e.target && e.target.closest("button")) return;
+        return openCourseEmployeeFinal(card.getAttribute("data-emp-id"));
+      };
+    });
+
+    listEl.querySelectorAll("button[data-course-action]").forEach(function(btn){
+      btn.onclick = function(e){
+        if(e){ e.preventDefault(); e.stopPropagation(); }
+        var action = btn.getAttribute("data-course-action");
+        var id = btn.getAttribute("data-emp-id");
+        if(action === "open") return openCourseEmployeeFinal(id);
+        if(action === "delete-emp") return window.deleteCourseEmployee(id);
+        return false;
+      };
+    });
+  }
+
+  window.renderEmployeeCourses = renderEmployeeCoursesFinal;
+  function renderEmployeeCoursesFinal(){
+    var area = $("cr-course-area");
+    var noFile = $("cr-no-file");
+    var summary = $("cr-file-summary");
+    var listEl = $("cr-courses-list");
+
+    var emp = currentEmployee();
+    if(!emp){
+      if(area) area.style.display = "none";
+      if(noFile) noFile.style.display = "block";
+      return;
+    }
+
+    if(area) area.style.display = "block";
+    if(noFile) noFile.style.display = "none";
+
+    var list = getCoursesForEmp(emp.id).sort(function(a,b){
+      return String(a.expiry || "").localeCompare(String(b.expiry || ""));
+    });
+
+    var valid = 0, action = 0, expired = 0;
+    list.forEach(function(c){
+      var cls = statusFor(c.expiry).cls;
+      if(cls === "ok") valid++;
+      if(cls === "soon") action++;
+      if(cls === "expired") expired++;
+    });
+
+    if(summary){
+      summary.innerHTML =
+        '<div class="courses-header-card">' +
+          '<div class="courses-header-top">' +
+            '<div><h3>' + esc(emp.name) + '</h3><small>Employee Course Profile</small></div>' +
+            '<span class="auto-save-pill">Auto Save</span>' +
+          '</div>' +
+          '<div class="courses-file-header">' +
+            '<div class="course-summary-tile employee"><div class="tile-label">Employee</div><div class="tile-value">' + esc(emp.name) + '</div></div>' +
+            '<div class="course-summary-tile"><div class="tile-label">Total</div><div class="tile-value">' + list.length + '</div></div>' +
+            '<div class="course-summary-tile"><div class="tile-label">Valid</div><div class="tile-value">' + valid + '</div></div>' +
+            '<div class="course-summary-tile"><div class="tile-label">Need Action</div><div class="tile-value">' + (action + expired) + '</div></div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    if(!listEl) return;
+
+    if(!list.length){
+      listEl.innerHTML = '<div class="simple-empty">No courses saved for this employee yet. Press + to add course.</div>';
+      return;
+    }
+
+    var grouped = {};
+    list.forEach(function(c){
+      var key = c.category || "Other";
+      if(!grouped[key]) grouped[key] = [];
+      grouped[key].push(c);
+    });
+
+    listEl.innerHTML = Object.keys(grouped).sort().map(function(cat){
+      var items = grouped[cat].map(function(c){
+        var st = statusFor(c.expiry);
+        return '<div class="course-file">' +
+          '<strong>' + esc(c.name) + '</strong>' +
+          '<small>Expiry: ' + esc(formatDate(c.expiry)) + '</small>' +
+          '<span class="status-pill ' + st.cls + '">' + esc(st.text) + '</span>' +
+          '<div class="course-actions">' +
+            '<button class="added-btn danger" type="button" data-delete-course-id="' + esc(c.id) + '">Delete</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+      return '<div class="report-subtitle">' + esc(cat) + '</div>' + items;
+    }).join("");
+
+    listEl.querySelectorAll("[data-delete-course-id]").forEach(function(btn){
+      btn.onclick = function(e){
+        if(e){ e.preventDefault(); e.stopPropagation(); }
+        return window.deleteEmployeeCourse(btn.getAttribute("data-delete-course-id"));
+      };
+    });
+  }
+
+  function bindCoursesFinal(){
+    fillCategorySelect();
+
+    var addEmpBtn = document.querySelector("#page-courses button[onclick*='addEmployeeOnlyProfile']");
+    if(addEmpBtn){
+      addEmpBtn.onclick = function(e){
+        if(e){ e.preventDefault(); e.stopPropagation(); }
+        return window.addEmployeeOnlyProfile();
+      };
+    }
+
+    var saveBtn = document.querySelector("#page-courses button[onclick*='addEmployeeCourse']");
+    if(saveBtn){
+      saveBtn.onclick = function(e){
+        if(e){ e.preventDefault(); e.stopPropagation(); }
+        return window.addEmployeeCourse();
+      };
+      saveBtn.setAttribute("data-fixed-save-course", "1");
+    }
+
+    var catBtn = document.querySelector("#page-courses button[onclick*='addCourseCategory']");
+    if(catBtn){
+      catBtn.onclick = function(e){
+        if(e){ e.preventDefault(); e.stopPropagation(); }
+        return window.addCourseCategory();
+      };
+    }
+
+    var empInput = $("cr-employee-name");
+    if(empInput){
+      empInput.onkeydown = function(e){
+        if(e.key === "Enter"){
+          e.preventDefault();
+          return window.addEmployeeOnlyProfile();
+        }
+      };
+    }
+
+    var search = $("cr-employee-search");
+    if(search) search.oninput = renderCourseEmployeesFinal;
+
+    saveNormalized();
+    renderCourseEmployeesFinal();
+    renderEmployeeCoursesFinal();
+  }
+
+  document.addEventListener("click", function(e){
+    var btn = e.target && e.target.closest ? e.target.closest("button") : null;
+    if(!btn || !btn.closest("#page-courses")) return;
+
+    var txt = clean(btn.textContent).toLowerCase();
+    var oc = btn.getAttribute("onclick") || "";
+
+    if(txt === "save course" || oc.indexOf("addEmployeeCourse") !== -1 || btn.getAttribute("data-fixed-save-course") === "1"){
+      e.preventDefault();
+      e.stopPropagation();
+      return window.addEmployeeCourse();
+    }
+  }, true);
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", bindCoursesFinal);
+  else bindCoursesFinal();
+
+  setTimeout(bindCoursesFinal, 300);
+  setTimeout(bindCoursesFinal, 1000);
+})();
+</script>
 
 </body>
 </html>
