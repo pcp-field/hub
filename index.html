@@ -9076,5 +9076,922 @@ function initDailyJobLog(){
   }
 </style>
 
+
+<style id="ahmed-final-home-clean-and-fixes-css">
+  /* Hide only the text/content on the home hero. Keep the home background/card itself. */
+  #page-home .home-hero .home-hero-content,
+  .home-hero .home-hero-content {
+    display: none !important;
+  }
+
+  /* Keep home area clean after text removal */
+  #page-home .home-hero,
+  .home-hero {
+    min-height: 240px !important;
+  }
+
+  @media (max-width: 720px) {
+    #page-home .home-hero,
+    .home-hero {
+      min-height: 210px !important;
+    }
+  }
+
+  /* Easier file buttons */
+  #page-files .file-row-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  #page-files .file-mini-btn {
+    min-height: 44px !important;
+    touch-action: manipulation !important;
+  }
+
+  /* Courses page: stop horizontal stretch and keep mobile smooth */
+  #page-courses {
+    overflow-x: hidden !important;
+  }
+
+  #page-courses .courses-simple-layout {
+    grid-template-columns: 360px 1fr !important;
+    gap: 14px !important;
+  }
+
+  @media (max-width: 760px) {
+    #page-courses .courses-simple-layout {
+      grid-template-columns: 1fr !important;
+    }
+  }
+</style>
+
+
+<script id="ahmed-final-site-fix-no-dialogs-files-location-courses">
+(function () {
+  "use strict";
+
+  function $(id) { return document.getElementById(id); }
+  function clean(v) { return String(v == null ? "" : v).trim(); }
+  function uid(prefix) {
+    return (prefix || "id") + "_" + Date.now() + "_" + Math.random().toString(16).slice(2);
+  }
+
+  function escapeHtml(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function toast(msg) {
+    var t = $("toast");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "toast";
+      t.className = "toast";
+      document.body.appendChild(t);
+    }
+    t.textContent = msg || "";
+    t.classList.add("show");
+    clearTimeout(window.__ahmedToastTimer);
+    window.__ahmedToastTimer = setTimeout(function () {
+      t.classList.remove("show");
+    }, 2200);
+  }
+
+  /* Remove native browser dialogs from the whole website so "Suppress dialogs" never appears. */
+  window.confirm = function () { return true; };
+  window.alert = function (msg) { toast(msg || ""); };
+
+  /* ---------------- Back/Home fix ---------------- */
+  function openHome() {
+    if (typeof window.openMainPage === "function") {
+      window.openMainPage("page-home");
+    } else {
+      document.querySelectorAll(".page").forEach(function (p) {
+        p.classList.remove("active", "nav-active");
+        p.style.setProperty("display", "none", "important");
+      });
+      var home = $("page-home");
+      if (home) {
+        home.classList.add("active", "nav-active");
+        home.style.setProperty("display", "block", "important");
+      }
+    }
+
+    document.querySelectorAll("#main-tabs .tab, .tabs .tab").forEach(function (btn) {
+      var page = btn.getAttribute("data-page");
+      var tab = btn.getAttribute("data-tab");
+      var text = (btn.textContent || "").toLowerCase();
+      btn.classList.toggle("active", page === "page-home" || tab === "home" || text.includes("home"));
+    });
+
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
+    return false;
+  }
+
+  window.goHome = openHome;
+  window.openHome = openHome;
+  window.returnHome = openHome;
+
+  function bindHomeButtons() {
+    [
+      "#home-return-btn",
+      ".home-return-btn",
+      ".back-home-btn",
+      "[data-action='home']",
+      "[data-go='home']"
+    ].forEach(function (sel) {
+      document.querySelectorAll(sel).forEach(function (btn) {
+        btn.onclick = function (e) {
+          if (e) { e.preventDefault(); e.stopPropagation(); }
+          return openHome();
+        };
+      });
+    });
+  }
+
+  /* ---------------- Files upload + share file only ---------------- */
+  var DB_NAME = "PCPFieldReportsHubLocalFilesDB";
+  var STORE = "pdfFiles";
+  var filesDb = null;
+  var managedFiles = [];
+
+  function fileStatus(msg) {
+    var s = $("files-status");
+    if (s) s.textContent = msg || "";
+  }
+
+  function openDb() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = function (event) {
+        var db = event.target.result;
+        if (!db.objectStoreNames.contains(STORE)) {
+          db.createObjectStore(STORE, { keyPath: "id" });
+        }
+      };
+      req.onsuccess = function (event) {
+        filesDb = event.target.result;
+        resolve(filesDb);
+      };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  function store(mode) {
+    return filesDb.transaction(STORE, mode || "readonly").objectStore(STORE);
+  }
+
+  async function saveRecord(record) {
+    if (!filesDb) await openDb();
+    return new Promise(function (resolve, reject) {
+      var req = store("readwrite").put(record);
+      req.onsuccess = resolve;
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  async function deleteRecord(id) {
+    if (!filesDb) await openDb();
+    return new Promise(function (resolve, reject) {
+      var req = store("readwrite").delete(id);
+      req.onsuccess = resolve;
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  function sizeText(size) {
+    if (!size && size !== 0) return "";
+    if (size < 1024) return size + " B";
+    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + " KB";
+    return (size / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  function safeFileName(name) {
+    return clean(name || "attachment").replace(/[\\/:*?"<>|]/g, "_");
+  }
+
+  function toShareFile(record) {
+    if (!record || !record.blob) return null;
+    try {
+      return new File([record.blob], safeFileName(record.name), { type: record.type || "application/octet-stream" });
+    } catch (e) {
+      return record.blob;
+    }
+  }
+
+  function blobToBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result || "").split(",")[1] || ""); };
+      reader.onerror = function () { reject(reader.error); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function loadFilesFinal() {
+    try {
+      if (!filesDb) await openDb();
+      var req = store("readonly").getAll();
+      await new Promise(function (resolve, reject) {
+        req.onsuccess = function () {
+          managedFiles = (req.result || []).map(function (f) {
+            f.selected = !!f.selected;
+            return f;
+          });
+          resolve();
+        };
+        req.onerror = function () { reject(req.error); };
+      });
+      renderFilesFinal();
+    } catch (e) {
+      fileStatus("Browser storage is not available here.");
+    }
+  }
+
+  async function addFilesFinal(event) {
+    var input = event && event.target ? event.target : $("file-input");
+    var files = Array.from((input && input.files) || []);
+    if (!files.length) return;
+
+    var added = 0;
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      var record = {
+        id: uid("file"),
+        name: file.name || "attachment",
+        size: file.size || 0,
+        type: file.type || "application/octet-stream",
+        savedAt: new Date().toISOString(),
+        selected: false,
+        blob: file
+      };
+      managedFiles.push(record);
+      await saveRecord(record);
+      added++;
+    }
+
+    if (input) input.value = "";
+    renderFilesFinal();
+    fileStatus(added + " file(s) uploaded and saved.");
+  }
+
+  function openStoredFile(id) {
+    var record = managedFiles.find(function (f) { return String(f.id) === String(id); });
+    if (!record || !record.blob) return;
+    var url = URL.createObjectURL(record.blob);
+    window.open(url, "_blank");
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  }
+
+  function downloadStoredFile(id) {
+    var record = managedFiles.find(function (f) { return String(f.id) === String(id); });
+    if (!record || !record.blob) return;
+    var url = URL.createObjectURL(record.blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = safeFileName(record.name);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  }
+
+  async function shareStoredFile(id) {
+    var record = managedFiles.find(function (f) { return String(f.id) === String(id); });
+    if (!record || !record.blob) {
+      fileStatus("File is not ready to share.");
+      return;
+    }
+
+    var shareFile = toShareFile(record);
+
+    /* Android bridge: share the file itself only. No text message. */
+    if (window.AndroidFileBridge && typeof window.AndroidFileBridge.sharePdf === "function") {
+      try {
+        var b64 = await blobToBase64(record.blob);
+        window.AndroidFileBridge.sharePdf(safeFileName(record.name), b64);
+        fileStatus("Share sheet opened.");
+        return;
+      } catch (e) {}
+    }
+
+    if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
+      try {
+        await navigator.share({ files: [shareFile] });
+        fileStatus("Share sheet opened.");
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") {
+          fileStatus("Sharing canceled.");
+          return;
+        }
+      }
+    }
+
+    downloadStoredFile(id);
+    fileStatus("Direct file sharing is not supported here. The file was downloaded instead.");
+  }
+
+  async function deleteStoredFile(id) {
+    managedFiles = managedFiles.filter(function (f) { return String(f.id) !== String(id); });
+    await deleteRecord(id);
+    renderFilesFinal();
+    fileStatus("File deleted.");
+  }
+
+  function renderFilesFinal() {
+    var list = $("file-list");
+    if (!list) return;
+
+    if (!managedFiles.length) {
+      list.innerHTML = '<div class="small-note">No files uploaded yet.</div>';
+      fileStatus("");
+      return;
+    }
+
+    list.innerHTML = managedFiles.map(function (file) {
+      return '' +
+        '<div class="file-item">' +
+          '<input class="select-icon" type="checkbox" ' + (file.selected ? 'checked' : '') + ' data-file-id="' + file.id + '" title="Select file">' +
+          '<div>' +
+            '<div class="file-name">📄 ' + escapeHtml(file.name || "attachment") + '</div>' +
+            '<div class="file-meta">' + sizeText(file.size) + ' • saved on this device</div>' +
+            '<div class="file-row-actions">' +
+              '<button class="file-mini-btn file-share" type="button" data-file-action="share" data-file-id="' + file.id + '">Share File</button>' +
+              '<button class="file-mini-btn" type="button" data-file-action="open" data-file-id="' + file.id + '">Open</button>' +
+              '<button class="file-mini-btn" type="button" data-file-action="download" data-file-id="' + file.id + '">Download</button>' +
+              '<button class="file-mini-btn file-delete" type="button" data-file-action="delete" data-file-id="' + file.id + '">Delete</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }).join("");
+
+    list.querySelectorAll(".select-icon").forEach(function (cb) {
+      cb.onchange = function () {
+        var id = cb.getAttribute("data-file-id");
+        managedFiles.forEach(function (f) {
+          if (String(f.id) === String(id)) f.selected = cb.checked;
+        });
+        fileStatus(managedFiles.filter(function (f) { return f.selected; }).length + " file(s) selected.");
+      };
+    });
+
+    list.querySelectorAll("button[data-file-action]").forEach(function (btn) {
+      btn.onclick = async function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        var id = btn.getAttribute("data-file-id");
+        var action = btn.getAttribute("data-file-action");
+        if (action === "share") await shareStoredFile(id);
+        if (action === "open") openStoredFile(id);
+        if (action === "download") downloadStoredFile(id);
+        if (action === "delete") await deleteStoredFile(id);
+      };
+    });
+  }
+
+  window.addFiles = addFilesFinal;
+  window.loadFilesFromDb = loadFilesFinal;
+  window.renderFiles = renderFilesFinal;
+
+  function bindFileInput() {
+    var input = $("file-input");
+    if (input) {
+      input.removeAttribute("accept");
+      input.onchange = addFilesFinal;
+    }
+    loadFilesFinal();
+  }
+
+  /* ---------------- Location share: Google Maps link only ---------------- */
+  function getGoogleMapsLinkFromLocation() {
+    try {
+      if (typeof currentResult !== "undefined" && currentResult) {
+        return currentResult.link || ("https://www.google.com/maps?q=" + currentResult.lat + "," + currentResult.lng);
+      }
+    } catch (e) {}
+
+    var meta = $("resultMeta");
+    if (meta) {
+      var text = meta.innerText || meta.textContent || "";
+      var match = text.match(/https:\/\/www\.google\.com\/maps\?q=[^\s]+/i);
+      if (match) return match[0];
+
+      var lat = (text.match(/Latitude:\s*([0-9.\-]+)/i) || [])[1];
+      var lng = (text.match(/Longitude:\s*([0-9.\-]+)/i) || [])[1];
+      if (lat && lng) return "https://www.google.com/maps?q=" + lat + "," + lng;
+    }
+
+    return "";
+  }
+
+  window.shareCurrent = function () {
+    var link = getGoogleMapsLinkFromLocation();
+    if (!link) {
+      toast("Search or save a well location first.");
+      return false;
+    }
+
+    if (window.AndroidFileBridge && typeof window.AndroidFileBridge.shareText === "function") {
+      window.AndroidFileBridge.shareText("Google Maps", link);
+      return false;
+    }
+
+    if (navigator.share) {
+      navigator.share({ url: link }).catch(function () {});
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link);
+      toast("Google Maps link copied.");
+    } else {
+      window.open(link, "_blank");
+    }
+    return false;
+  };
+
+  function bindLocationShare() {
+    var btn = $("shareBtn");
+    if (btn) {
+      btn.onclick = function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        return window.shareCurrent();
+      };
+    }
+  }
+
+  /* ---------------- Courses fixed: add employee + save course ---------------- */
+  var EMP_KEY = "crEmployees";
+  var COURSE_KEY = "crCourses";
+  var CAT_KEY = "crCategories";
+  var CURRENT_KEY = "crCurrentEmployeeId";
+  var DEFAULT_CATEGORIES = ["HSE", "Driving", "Technical", "OPAL", "Safety", "Medical", "Well Control", "Other"];
+
+  function loadJson(key, fallback) {
+    try {
+      var value = JSON.parse(localStorage.getItem(key) || "null");
+      return Array.isArray(value) ? value : fallback.slice();
+    } catch (e) {
+      return fallback.slice();
+    }
+  }
+
+  function saveJson(key, value) {
+    localStorage.setItem(key, JSON.stringify(value || []));
+  }
+
+  function employees() { return loadJson(EMP_KEY, []); }
+  function saveEmployees(v) { saveJson(EMP_KEY, v); }
+  function courses() { return loadJson(COURSE_KEY, []); }
+  function saveCourses(v) { saveJson(COURSE_KEY, v); }
+
+  function categories() {
+    var custom = loadJson(CAT_KEY, []);
+    var all = DEFAULT_CATEGORIES.concat(custom);
+    var seen = {};
+    return all.filter(function (c) {
+      c = clean(c);
+      var k = c.toLowerCase();
+      if (!c || seen[k]) return false;
+      seen[k] = true;
+      return true;
+    });
+  }
+
+  function currentEmpId() {
+    return clean(localStorage.getItem(CURRENT_KEY) || "");
+  }
+
+  function setCurrentEmpId(id) {
+    localStorage.setItem(CURRENT_KEY, clean(id));
+  }
+
+  function empById(id) {
+    id = clean(id);
+    return employees().find(function (e) { return String(e.id) === id; }) || null;
+  }
+
+  function courseStatus(msg) {
+    var area = $("cr-course-area");
+    if (!area) return;
+    var line = $("cr-status-line");
+    if (!line) {
+      line = document.createElement("div");
+      line.id = "cr-status-line";
+      line.className = "small-note";
+      line.style.marginTop = "10px";
+      area.appendChild(line);
+    }
+    line.textContent = msg || "";
+  }
+
+  function fillCategorySelect() {
+    var sel = $("cr-category");
+    if (!sel) return;
+    var old = sel.value;
+    sel.innerHTML = categories().map(function (c) {
+      return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+    }).join("");
+    if (old) sel.value = old;
+  }
+
+  window.addCourseCategory = function () {
+    var input = $("cr-new-category");
+    var value = clean(input && input.value);
+    if (!value) return false;
+
+    var custom = loadJson(CAT_KEY, []);
+    if (!custom.some(function (c) { return clean(c).toLowerCase() === value.toLowerCase(); })) {
+      custom.push(value);
+      saveJson(CAT_KEY, custom);
+    }
+
+    if (input) input.value = "";
+    fillCategorySelect();
+    var sel = $("cr-category");
+    if (sel) sel.value = value;
+    return false;
+  };
+
+  window.addEmployeeOnlyProfile = function () {
+    var input = $("cr-employee-name");
+    var name = clean(input && input.value);
+    if (!name) {
+      toast("Enter employee name.");
+      return false;
+    }
+
+    var list = employees();
+    var existing = list.find(function (e) { return clean(e.name).toLowerCase() === name.toLowerCase(); });
+
+    if (!existing) {
+      existing = { id: uid("emp"), name: name, createdAt: new Date().toISOString() };
+      list.push(existing);
+      saveEmployees(list);
+    }
+
+    if (input) input.value = "";
+    setCurrentEmpId(existing.id);
+    renderCourseEmployeesFinal();
+    openEmployeeProfileFinal(existing.id);
+    courseStatus("Employee saved.");
+    return false;
+  };
+
+  function statusFor(dateStr) {
+    if (!dateStr) return { text: "No expiry", cls: "soon" };
+    var today = new Date(); today.setHours(0,0,0,0);
+    var d = new Date(dateStr + "T00:00:00");
+    var diff = Math.ceil((d - today) / 86400000);
+    if (diff < 0) return { text: "Expired " + Math.abs(diff) + " day(s) ago", cls: "expired" };
+    if (diff <= 30) return { text: "Need Action: " + diff + " day(s) left", cls: "soon" };
+    return { text: "Valid: " + diff + " day(s) left", cls: "ok" };
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return "-";
+    try { return new Date(dateStr + "T00:00:00").toLocaleDateString(); } catch (e) { return dateStr; }
+  }
+
+  function openEmployeeProfileFinal(id) {
+    var emp = empById(id);
+    if (!emp) return false;
+
+    setCurrentEmpId(emp.id);
+
+    var area = $("cr-course-area");
+    var noFile = $("cr-no-file");
+    if (area) area.style.display = "block";
+    if (noFile) noFile.style.display = "none";
+
+    fillCategorySelect();
+    renderCourseEmployeesFinal();
+    renderEmployeeCoursesFinal();
+
+    var form = $("cr-profile-course-form");
+    if (form) form.style.display = "none";
+
+    return false;
+  }
+
+  window.openEmployeeProfile = openEmployeeProfileFinal;
+  window.openCourseEmployee = openEmployeeProfileFinal;
+  window.selectCourseEmployee = openEmployeeProfileFinal;
+
+  window.toggleProfileCourseForm = function (force) {
+    var form = $("cr-profile-course-form");
+    if (!form) return false;
+
+    if (!currentEmpId() && employees().length) {
+      setCurrentEmpId(employees()[0].id);
+    }
+
+    if (!currentEmpId()) {
+      toast("Add or open employee profile first.");
+      return false;
+    }
+
+    fillCategorySelect();
+    var show = (typeof force === "boolean") ? force : (form.style.display === "none" || !form.style.display);
+    form.style.display = show ? "block" : "none";
+    return false;
+  };
+
+  window.addEmployeeCourse = function () {
+    var emp = empById(currentEmpId());
+
+    if (!emp) {
+      toast("Open employee profile first.");
+      return false;
+    }
+
+    var nameEl = $("cr-course-name");
+    var dateEl = $("cr-expiry-date");
+    var catEl = $("cr-category");
+
+    var name = clean(nameEl && nameEl.value);
+    var expiry = clean(dateEl && dateEl.value);
+    var category = clean(catEl && catEl.value) || "Other";
+
+    if (!name) {
+      toast("Enter course name.");
+      return false;
+    }
+
+    if (!expiry) {
+      toast("Enter expiry date.");
+      return false;
+    }
+
+    var list = courses();
+    list.push({
+      id: uid("course"),
+      empId: emp.id,
+      employeeName: emp.name,
+      name: name,
+      expiry: expiry,
+      category: category,
+      createdAt: new Date().toISOString()
+    });
+    saveCourses(list);
+
+    if (nameEl) nameEl.value = "";
+    if (dateEl) dateEl.value = "";
+
+    var form = $("cr-profile-course-form");
+    if (form) form.style.display = "none";
+
+    renderEmployeeCoursesFinal();
+    renderCourseEmployeesFinal();
+    courseStatus("Course saved.");
+    return false;
+  };
+
+  window.deleteEmployeeCourse = function (courseId) {
+    saveCourses(courses().filter(function (c) { return String(c.id) !== String(courseId); }));
+    renderEmployeeCoursesFinal();
+    renderCourseEmployeesFinal();
+    courseStatus("Course deleted.");
+    return false;
+  };
+
+  window.deleteCourseEmployee = function (empId) {
+    empId = clean(empId);
+    saveEmployees(employees().filter(function (e) { return String(e.id) !== empId; }));
+    saveCourses(courses().filter(function (c) { return String(c.empId) !== empId; }));
+
+    if (currentEmpId() === empId) {
+      localStorage.removeItem(CURRENT_KEY);
+      var area = $("cr-course-area");
+      var noFile = $("cr-no-file");
+      if (area) area.style.display = "none";
+      if (noFile) noFile.style.display = "block";
+    }
+
+    renderCourseEmployeesFinal();
+    renderEmployeeCoursesFinal();
+    courseStatus("Employee deleted.");
+    return false;
+  };
+
+  function buildCourseFileText() {
+    var emp = empById(currentEmpId());
+    if (!emp) return "";
+    var list = courses().filter(function (c) { return String(c.empId) === String(emp.id); });
+    var lines = ["Employee Course File", "Employee: " + emp.name, "Total Courses: " + list.length, ""];
+    list.forEach(function (c, i) {
+      lines.push((i + 1) + ". " + c.name);
+      lines.push("Category: " + (c.category || "Other"));
+      lines.push("Expiry: " + (c.expiry || "-"));
+      lines.push("Status: " + statusFor(c.expiry).text);
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+
+  window.copyEmployeeCourseFile = function () {
+    var text = buildCourseFileText();
+    if (!text) return false;
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text);
+    courseStatus("Copied.");
+    return false;
+  };
+
+  window.shareEmployeeCourseFile = function () {
+    var text = buildCourseFileText();
+    if (!text) return false;
+    if (navigator.share) navigator.share({ text: text }).catch(function () {});
+    else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text);
+    courseStatus("Share opened.");
+    return false;
+  };
+
+  function renderCourseEmployeesFinal() {
+    var listEl = $("cr-employee-list");
+    var countEl = $("cr-employee-count");
+    if (!listEl) return;
+
+    var search = clean($("cr-employee-search") && $("cr-employee-search").value).toLowerCase();
+    var list = employees().filter(function (e) {
+      return !search || clean(e.name).toLowerCase().includes(search);
+    });
+
+    if (countEl) countEl.textContent = String(employees().length);
+
+    if (!list.length) {
+      listEl.innerHTML = '<div class="simple-empty">No employees saved yet.</div>';
+      return;
+    }
+
+    var selected = currentEmpId();
+    listEl.innerHTML = list.map(function (e) {
+      var courseCount = courses().filter(function (c) { return String(c.empId) === String(e.id); }).length;
+      var active = String(e.id) === String(selected) ? " active-employee" : "";
+      return '' +
+        '<div class="employee-file' + active + '" data-emp-id="' + e.id + '">' +
+          '<div><strong>' + escapeHtml(e.name) + '</strong><small>' + courseCount + ' course(s)</small></div>' +
+          '<div style="display:grid;gap:8px;min-width:92px;">' +
+            '<button class="emp-open-btn" type="button" data-course-action="open" data-emp-id="' + e.id + '">Open</button>' +
+            '<button class="emp-del-btn" type="button" data-course-action="delete-emp" data-emp-id="' + e.id + '">Delete</button>' +
+          '</div>' +
+        '</div>';
+    }).join("");
+
+    listEl.querySelectorAll(".employee-file").forEach(function (card) {
+      card.onclick = function (e) {
+        if (e && e.target && e.target.closest("button")) return;
+        return openEmployeeProfileFinal(card.getAttribute("data-emp-id"));
+      };
+    });
+
+    listEl.querySelectorAll("button[data-course-action]").forEach(function (btn) {
+      btn.onclick = function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        var action = btn.getAttribute("data-course-action");
+        var id = btn.getAttribute("data-emp-id");
+        if (action === "open") return openEmployeeProfileFinal(id);
+        if (action === "delete-emp") return window.deleteCourseEmployee(id);
+        return false;
+      };
+    });
+  }
+
+  window.renderCourseEmployees = renderCourseEmployeesFinal;
+
+  function renderEmployeeCoursesFinal() {
+    var area = $("cr-course-area");
+    var noFile = $("cr-no-file");
+    var summary = $("cr-file-summary");
+    var listEl = $("cr-courses-list");
+    var emp = empById(currentEmpId());
+
+    if (!emp) {
+      if (area) area.style.display = "none";
+      if (noFile) noFile.style.display = "block";
+      return;
+    }
+
+    if (area) area.style.display = "block";
+    if (noFile) noFile.style.display = "none";
+
+    var list = courses()
+      .filter(function (c) { return String(c.empId) === String(emp.id); })
+      .sort(function (a, b) { return String(a.expiry || "").localeCompare(String(b.expiry || "")); });
+
+    var valid = 0, action = 0, expired = 0;
+    list.forEach(function (c) {
+      var st = statusFor(c.expiry).cls;
+      if (st === "ok") valid++;
+      if (st === "soon") action++;
+      if (st === "expired") expired++;
+    });
+
+    if (summary) {
+      summary.innerHTML = '' +
+        '<div class="courses-header-card">' +
+          '<div class="courses-header-top">' +
+            '<div><h3>' + escapeHtml(emp.name) + '</h3><small>Employee Course Profile</small></div>' +
+            '<span class="auto-save-pill">Auto Save</span>' +
+          '</div>' +
+          '<div class="courses-file-header">' +
+            '<div class="course-summary-tile employee"><div class="tile-label">Employee</div><div class="tile-value">' + escapeHtml(emp.name) + '</div></div>' +
+            '<div class="course-summary-tile"><div class="tile-label">Total</div><div class="tile-value">' + list.length + '</div></div>' +
+            '<div class="course-summary-tile"><div class="tile-label">Valid</div><div class="tile-value">' + valid + '</div></div>' +
+            '<div class="course-summary-tile"><div class="tile-label">Need Action</div><div class="tile-value">' + (action + expired) + '</div></div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    if (!listEl) return;
+
+    if (!list.length) {
+      listEl.innerHTML = '<div class="simple-empty">No courses saved for this employee yet. Press + to add course.</div>';
+      return;
+    }
+
+    var grouped = {};
+    list.forEach(function (c) {
+      var k = c.category || "Other";
+      if (!grouped[k]) grouped[k] = [];
+      grouped[k].push(c);
+    });
+
+    listEl.innerHTML = Object.keys(grouped).sort().map(function (cat) {
+      var items = grouped[cat].map(function (c) {
+        var st = statusFor(c.expiry);
+        return '' +
+          '<div class="course-file">' +
+            '<strong>' + escapeHtml(c.name) + '</strong>' +
+            '<small>Expiry: ' + escapeHtml(formatDate(c.expiry)) + '</small>' +
+            '<span class="status-pill ' + st.cls + '">' + escapeHtml(st.text) + '</span>' +
+            '<div class="course-actions">' +
+              '<button class="added-btn danger" type="button" onclick="deleteEmployeeCourse(\'' + c.id + '\')">Delete</button>' +
+            '</div>' +
+          '</div>';
+      }).join("");
+      return '<div class="report-subtitle">' + escapeHtml(cat) + '</div>' + items;
+    }).join("");
+  }
+
+  window.renderEmployeeCourses = renderEmployeeCoursesFinal;
+
+  function bindCourses() {
+    fillCategorySelect();
+
+    var addEmpBtn = document.querySelector("#page-courses button[onclick*='addEmployeeOnlyProfile']");
+    if (addEmpBtn) {
+      addEmpBtn.onclick = function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        return window.addEmployeeOnlyProfile();
+      };
+    }
+
+    var saveCourseBtn = document.querySelector("#page-courses button[onclick*='addEmployeeCourse']");
+    if (saveCourseBtn) {
+      saveCourseBtn.onclick = function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        return window.addEmployeeCourse();
+      };
+    }
+
+    var addCatBtn = document.querySelector("#page-courses button[onclick*='addCourseCategory']");
+    if (addCatBtn) {
+      addCatBtn.onclick = function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        return window.addCourseCategory();
+      };
+    }
+
+    var empInput = $("cr-employee-name");
+    if (empInput) {
+      empInput.onkeydown = function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          window.addEmployeeOnlyProfile();
+        }
+      };
+    }
+
+    var search = $("cr-employee-search");
+    if (search) search.oninput = renderCourseEmployeesFinal;
+
+    renderCourseEmployeesFinal();
+    renderEmployeeCoursesFinal();
+  }
+
+  function initPatch() {
+    bindHomeButtons();
+    bindFileInput();
+    bindLocationShare();
+    bindCourses();
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initPatch);
+  else initPatch();
+
+  setTimeout(initPatch, 400);
+  setTimeout(initPatch, 1200);
+})();
+</script>
+
 </body>
 </html>
