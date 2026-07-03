@@ -2852,6 +2852,168 @@ body.light-mode .offline-sync-badge.active{
 
 </head>
 <body>
+<script id="global-delete-confirm">
+/*
+  Site-wide delete confirmation.
+  Registered as the FIRST capture-phase click listener on the document so it
+  runs before every other handler (several scripts also listen in capture
+  phase). Any recognised Delete button is paused, a styled confirmation dialog
+  is shown, and the original click is re-fired only if the user confirms.
+  Note: window.confirm is overridden elsewhere to always return true, so any
+  confirm() calls inside existing delete handlers pass silently — this dialog
+  is the single confirmation the user sees.
+*/
+(function(){
+  "use strict";
+
+  var approved = new WeakSet();
+
+  var CSS =
+    '#pcp-confirm-overlay{position:fixed;inset:0;background:rgba(2,6,14,.62);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .15s ease;}' +
+    '#pcp-confirm-overlay.show{opacity:1;}' +
+    '#pcp-confirm-box{background:var(--bg2,#161b22);border:1px solid var(--border2,rgba(255,255,255,.14));border-radius:18px;padding:20px;max-width:360px;width:100%;box-shadow:0 18px 50px rgba(0,0,0,.5);transform:translateY(8px) scale(.98);transition:transform .15s ease;}' +
+    '#pcp-confirm-overlay.show #pcp-confirm-box{transform:translateY(0) scale(1);}' +
+    '#pcp-confirm-box .pcp-confirm-icon{width:44px;height:44px;border-radius:12px;background:rgba(248,81,73,.14);border:1px solid rgba(248,81,73,.32);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px;}' +
+    '#pcp-confirm-box h3{margin:0 0 6px;font-size:16px;font-weight:700;color:var(--text,#e6edf3);font-family:"DM Sans",sans-serif;}' +
+    '#pcp-confirm-box p{margin:0 0 16px;font-size:13px;line-height:1.55;color:var(--text2,#8b949e);font-family:"DM Sans",sans-serif;}' +
+    '#pcp-confirm-box .pcp-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;}' +
+    '#pcp-confirm-box button{border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:700;font-family:"DM Sans",sans-serif;cursor:pointer;min-height:44px;}' +
+    '#pcp-confirm-cancel{background:var(--bg3,#21262d);border:1px solid var(--border2,rgba(255,255,255,.14));color:var(--text,#e6edf3);}' +
+    '#pcp-confirm-ok{background:#da3633;color:#fff;}' +
+    '#pcp-confirm-ok:active,#pcp-confirm-cancel:active{transform:scale(.97);}';
+
+  var styleInjected = false;
+  function ensureStyle(){
+    if(styleInjected) return;
+    var st = document.createElement("style");
+    st.id = "pcp-confirm-style";
+    st.textContent = CSS;
+    document.head.appendChild(st);
+    styleInjected = true;
+  }
+
+  var activeResolve = null;
+
+  function closeDialog(result){
+    var ov = document.getElementById("pcp-confirm-overlay");
+    if(ov){
+      ov.classList.remove("show");
+      setTimeout(function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); }, 160);
+    }
+    document.removeEventListener("keydown", onKey, true);
+    var r = activeResolve;
+    activeResolve = null;
+    if(r) r(result);
+  }
+
+  function onKey(e){
+    if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); closeDialog(false); }
+    if(e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); closeDialog(true); }
+  }
+
+  function showConfirm(title, message){
+    return new Promise(function(resolve){
+      // Only one dialog at a time; cancel any previous one.
+      if(activeResolve) closeDialog(false);
+      activeResolve = resolve;
+      ensureStyle();
+
+      var ov = document.createElement("div");
+      ov.id = "pcp-confirm-overlay";
+      ov.innerHTML =
+        '<div id="pcp-confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="pcp-confirm-title">' +
+          '<div class="pcp-confirm-icon">🗑</div>' +
+          '<h3 id="pcp-confirm-title"></h3>' +
+          '<p id="pcp-confirm-msg"></p>' +
+          '<div class="pcp-confirm-actions">' +
+            '<button type="button" id="pcp-confirm-cancel">Cancel</button>' +
+            '<button type="button" id="pcp-confirm-ok">Delete</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      ov.querySelector("#pcp-confirm-title").textContent = title;
+      ov.querySelector("#pcp-confirm-msg").textContent = message;
+
+      ov.addEventListener("click", function(e){ if(e.target === ov) closeDialog(false); });
+      ov.querySelector("#pcp-confirm-cancel").addEventListener("click", function(e){ e.stopPropagation(); closeDialog(false); });
+      ov.querySelector("#pcp-confirm-ok").addEventListener("click", function(e){ e.stopPropagation(); closeDialog(true); });
+      document.addEventListener("keydown", onKey, true);
+
+      requestAnimationFrame(function(){ ov.classList.add("show"); });
+      setTimeout(function(){ var c = ov.querySelector("#pcp-confirm-cancel"); if(c) c.focus(); }, 60);
+    });
+  }
+
+  // Expose for reuse anywhere in the site.
+  window.pcpConfirmDelete = showConfirm;
+
+  function findDeleteButton(target){
+    if(!target || !target.closest) return null;
+    var btn = target.closest('button, [role="button"]');
+    if(!btn) return null;
+    // Never intercept the dialog's own buttons.
+    if(btn.id === "pcp-confirm-ok" || btn.id === "pcp-confirm-cancel") return null;
+
+    if(btn.matches(
+      '[data-delete-emp],[data-delete-course],[data-delete-force-emp],[data-cr-delete],' +
+      '[data-course-action="delete-emp"],[data-file-action="delete"],[data-action="delete"],' +
+      '#deleteBtn,#djl-remove-job-type-btn'
+    )) return btn;
+
+    var oc = btn.getAttribute("onclick") || "";
+    if(/deleteDailyEntry|deleteEmployeeCourse|deleteCourseEmployee|deleteLocation/.test(oc)) return btn;
+
+    var txt = (btn.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+    if(txt === "delete" || txt === "🗑 delete" || txt === "🗑") return btn;
+
+    return null;
+  }
+
+  function dialogTextFor(btn){
+    if(btn.id === "deleteBtn"){
+      return ["Delete Well Location", "This saved well location will be deleted from the shared database for all users. This cannot be undone."];
+    }
+    if(btn.matches('[data-delete-emp],[data-delete-force-emp],[data-cr-delete],[data-course-action="delete-emp"]') ||
+       /deleteCourseEmployee/.test(btn.getAttribute("onclick") || "")){
+      return ["Delete Employee Profile", "The employee profile and all courses saved inside it will be deleted. This cannot be undone."];
+    }
+    if(btn.matches('[data-delete-course]') || /deleteEmployeeCourse/.test(btn.getAttribute("onclick") || "")){
+      return ["Delete Course", "This course will be removed from the employee profile. This cannot be undone."];
+    }
+    if(btn.matches('[data-file-action="delete"],[data-action="delete"]')){
+      return ["Delete File", "This file will be deleted from this device. This cannot be undone."];
+    }
+    if(/deleteDailyEntry/.test(btn.getAttribute("onclick") || "")){
+      return ["Delete Log Entry", "This daily job log entry will be deleted. This cannot be undone."];
+    }
+    if(btn.id === "djl-remove-job-type-btn"){
+      return ["Remove Job Type", "The selected job type will be removed from the list on this device."];
+    }
+    return ["Confirm Delete", "This item will be deleted. This cannot be undone."];
+  }
+
+  document.addEventListener("click", function(ev){
+    var btn = findDeleteButton(ev.target);
+    if(!btn) return;
+
+    if(approved.has(btn)){
+      approved.delete(btn);
+      return; // confirmed — let every other handler run normally
+    }
+
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    ev.stopPropagation();
+
+    var t = dialogTextFor(btn);
+    showConfirm(t[0], t[1]).then(function(ok){
+      if(!ok) return;
+      approved.add(btn);
+      btn.click(); // re-fire; this time it passes straight through
+    });
+  }, true);
+})();
+</script>
 <header>
 <div>
 <h1>PCP Field Reports Hub</h1>
@@ -4322,16 +4484,27 @@ function deleteEmployeeCourse(id){
 function escapeAdded(s){
   return String(s || '').replace(/[&<>"']/g, function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m];});
 }
-window.addCourseCategory = addCourseCategory;
-window.addCourseEmployee = addCourseEmployee;
-window.openCourseEmployee = openCourseEmployee;
-window.deleteCourseEmployee = deleteCourseEmployee;
-window.renderCourseEmployees = renderCourseEmployees;
-window.addEmployeeCourse = addEmployeeCourse;
-window.copyEmployeeCourseFile = copyEmployeeCourseFile;
-window.shareEmployeeCourseFile = shareEmployeeCourseFile;
-window.copyCourseAdded = copyCourseAdded;
-window.deleteEmployeeCourse = deleteEmployeeCourse;
+/*
+  This module executes AFTER the classic scripts (module scripts are deferred),
+  so unconditional assignments here used to overwrite the final rebuilt Courses
+  page handlers with these older implementations (which render into element IDs
+  that no longer exist) — breaking Delete/Open on the Courses page.
+  Only fill in a global if nothing newer has already defined it.
+*/
+[
+  ["addCourseCategory", addCourseCategory],
+  ["addCourseEmployee", addCourseEmployee],
+  ["openCourseEmployee", openCourseEmployee],
+  ["deleteCourseEmployee", deleteCourseEmployee],
+  ["renderCourseEmployees", renderCourseEmployees],
+  ["addEmployeeCourse", addEmployeeCourse],
+  ["copyEmployeeCourseFile", copyEmployeeCourseFile],
+  ["shareEmployeeCourseFile", shareEmployeeCourseFile],
+  ["copyCourseAdded", copyCourseAdded],
+  ["deleteEmployeeCourse", deleteEmployeeCourse]
+].forEach(function(pair){
+  if(typeof window[pair[0]] !== "function") window[pair[0]] = pair[1];
+});
 document.addEventListener('DOMContentLoaded', function(){
   renderCourseCategoryOptions();
   renderCourseEmployees();
@@ -10156,11 +10329,28 @@ function initDailyJobLog(){
   #page-courses .crx-empty{border:1px dashed var(--border2);background:var(--bg3);border-radius:16px;padding:16px;text-align:center;color:var(--text2);font-size:13px;line-height:1.5;}
   #page-courses .crx-category-row{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px;}
   #page-courses .crx-msg{font-size:12px;color:var(--green);min-height:18px;margin-top:8px;}
+  #page-courses .crx-addgrid{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;}
+  #page-courses .crx-emp-email{display:block;margin-top:3px;font-size:11px;color:var(--accent);word-break:break-all;}
+  #page-courses .crx-emp-email.missing{color:var(--text3);}
+  #page-courses .crx-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle;}
+  #page-courses .crx-email-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-bottom:12px;align-items:end;}
+  #page-courses .crx-btn.mail{background:rgba(63,185,80,.14);border:1px solid rgba(63,185,80,.35);color:var(--green);}
+  #page-courses .crx-settings{background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:0;}
+  #page-courses .crx-settings summary{cursor:pointer;list-style:none;padding:14px;font-weight:700;color:var(--text);font-size:14px;display:flex;justify-content:space-between;align-items:center;}
+  #page-courses .crx-settings summary::-webkit-details-marker{display:none;}
+  #page-courses .crx-settings summary small{display:block;color:var(--text2);font-size:12px;font-weight:400;margin-top:3px;}
+  #page-courses .crx-settings .crx-settings-body{padding:0 14px 14px;}
+  #page-courses .crx-settings-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;}
+  #page-courses .crx-note{font-size:12px;color:var(--text2);line-height:1.55;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:10px;}
+  #page-courses .crx-note b{color:var(--text);}
   @media(max-width:820px){
     #page-courses .crx-grid{grid-template-columns:1fr;}
     #page-courses .crx-formgrid{grid-template-columns:1fr;}
     #page-courses .crx-summary{grid-template-columns:1fr 1fr;}
     #page-courses .crx-row{grid-template-columns:1fr;}
+    #page-courses .crx-addgrid{grid-template-columns:1fr;}
+    #page-courses .crx-settings-grid{grid-template-columns:1fr;}
+    #page-courses .crx-email-row{grid-template-columns:1fr;}
   }
 </style>
 
@@ -10194,7 +10384,7 @@ function initDailyJobLog(){
   function employees(){
     return load(EMP_KEY).map(function(e){
       e = e || {};
-      return { id:String(e.id || e.empId || e.employeeId || uid("emp")), name:clean(e.name || e.employeeName || e.fullName || "Employee"), createdAt:e.createdAt || "" };
+      return { id:String(e.id || e.empId || e.employeeId || uid("emp")), name:clean(e.name || e.employeeName || e.fullName || "Employee"), email:clean(e.email || ""), createdAt:e.createdAt || "" };
     }).filter(function(e){ return e.name; });
   }
   function saveEmployees(list){ save(EMP_KEY, list); }
@@ -10274,12 +10464,25 @@ function initDailyJobLog(){
         '<div class="section-label">Courses Renewal</div>' +
         '<div class="crx-panel">' +
           '<div class="crx-title"><div><h3>Employee Profiles</h3><small>Add employee, open profile, then save courses inside the selected profile.</small></div><span class="auto-save-pill">Auto Save</span></div>' +
-          '<div class="crx-row">' +
+          '<div class="crx-addgrid">' +
             '<div class="crx-field"><label>Employee Name</label><input id="crx-employee-name" class="crx-input" type="text" placeholder="Ahmed Al Bakri"></div>' +
+            '<div class="crx-field"><label>Employee Email (for reminders)</label><input id="crx-employee-email" class="crx-input" type="email" placeholder="name@company.com (optional)"></div>' +
             '<button id="crx-add-employee" class="crx-btn" type="button">+ Add Employee</button>' +
           '</div>' +
           '<div id="crx-msg" class="crx-msg"></div>' +
         '</div>' +
+        '<details class="crx-settings" id="crx-email-settings">' +
+          '<summary><span>📧 Email Reminder Settings<small>Optional: connect a free EmailJS account to send reminders directly. Otherwise reminders open in your email app.</small></span><span>▾</span></summary>' +
+          '<div class="crx-settings-body">' +
+            '<div class="crx-note"><b>How it works:</b> Press <b>Send Reminder</b> inside an employee profile. If EmailJS is configured below, the email is sent automatically to the employee. If not, your device email app opens with the reminder already written — just press send. Free setup at emailjs.com: create a Service, an Email Template using variables <b>to_email, to_name, subject, message</b>, then paste the IDs here.</div>' +
+            '<div class="crx-settings-grid">' +
+              '<div class="crx-field"><label>Service ID</label><input id="crx-ejs-service" class="crx-input" type="text" placeholder="service_xxxxxxx"></div>' +
+              '<div class="crx-field"><label>Template ID</label><input id="crx-ejs-template" class="crx-input" type="text" placeholder="template_xxxxxxx"></div>' +
+              '<div class="crx-field"><label>Public Key</label><input id="crx-ejs-key" class="crx-input" type="text" placeholder="XXXXXXXXXXXXXXX"></div>' +
+            '</div>' +
+            '<div class="crx-row"><button id="crx-ejs-save" class="crx-btn" type="button">Save Email Settings</button><button id="crx-send-all" class="crx-btn mail" type="button">📧 Send Reminders To All Due</button></div>' +
+          '</div>' +
+        '</details>' +
         '<div class="crx-grid">' +
           '<div class="crx-panel">' +
             '<div class="crx-title"><div><h3>Employees</h3><small>Tap employee or Open to view profile.</small></div><span id="crx-count" class="count-pill">0</span></div>' +
@@ -10294,22 +10497,199 @@ function initDailyJobLog(){
 
     $("crx-add-employee").addEventListener("click", addEmployee);
     $("crx-employee-name").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); addEmployee(); } });
+    $("crx-employee-email").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); addEmployee(); } });
     $("crx-search").addEventListener("input", renderEmployees);
+    $("crx-ejs-save").addEventListener("click", saveEmailConfig);
+    $("crx-send-all").addEventListener("click", sendAllReminders);
+    fillEmailConfigInputs();
+  }
+
+  /* ===== Email reminder support ===== */
+  var EJS_KEY = "crxEmailJsConfig";
+
+  function emailConfig(){
+    try{
+      var c = JSON.parse(localStorage.getItem(EJS_KEY) || "{}") || {};
+      return { serviceId:clean(c.serviceId), templateId:clean(c.templateId), publicKey:clean(c.publicKey) };
+    }catch(e){ return { serviceId:"", templateId:"", publicKey:"" }; }
+  }
+  function emailConfigReady(){
+    var c = emailConfig();
+    return !!(c.serviceId && c.templateId && c.publicKey);
+  }
+  function fillEmailConfigInputs(){
+    var c = emailConfig();
+    if($("crx-ejs-service")) $("crx-ejs-service").value = c.serviceId;
+    if($("crx-ejs-template")) $("crx-ejs-template").value = c.templateId;
+    if($("crx-ejs-key")) $("crx-ejs-key").value = c.publicKey;
+  }
+  function saveEmailConfig(){
+    var c = {
+      serviceId: clean($("crx-ejs-service") && $("crx-ejs-service").value),
+      templateId: clean($("crx-ejs-template") && $("crx-ejs-template").value),
+      publicKey: clean($("crx-ejs-key") && $("crx-ejs-key").value)
+    };
+    localStorage.setItem(EJS_KEY, JSON.stringify(c));
+    setMsg(emailConfigReady() ? "Email settings saved. Reminders will be sent automatically." : "Settings saved. Fill all 3 fields for automatic sending; email app will be used meanwhile.");
+    return false;
+  }
+
+  function isValidEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || "").trim()); }
+
+  function dueCourses(empId){
+    return courses().filter(function(c){
+      if(String(c.empId) !== String(empId)) return false;
+      var cls = statusFor(c.expiry).cls;
+      return cls === "soon" || cls === "expired";
+    }).sort(function(a,b){ return String(a.expiry).localeCompare(String(b.expiry)); });
+  }
+
+  function buildReminderEmail(emp, list){
+    var lines = list.map(function(c){
+      var st = statusFor(c.expiry);
+      return "- " + c.name + " (" + (c.category || "Other") + "): expiry " + fmtDate(c.expiry) + " — " + st.text;
+    });
+    var subject = "Course Renewal Reminder - " + emp.name;
+    var body =
+      "Dear " + emp.name + ",\r\n\r\n" +
+      "This is a reminder that the following course(s) registered under your name are expired or will expire soon:\r\n\r\n" +
+      lines.join("\r\n") + "\r\n\r\n" +
+      "Please arrange the renewal before the expiry date.\r\n\r\n" +
+      "Regards,\r\nPCP Field Reports Hub";
+    return { subject: subject, body: body };
+  }
+
+  function openMailApp(toEmail, subject, body){
+    var href = "mailto:" + encodeURIComponent(toEmail) +
+      "?subject=" + encodeURIComponent(subject) +
+      "&body=" + encodeURIComponent(body);
+    var a = document.createElement("a");
+    a.href = href;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ a.remove(); }, 0);
+  }
+
+  function sendViaEmailJs(toEmail, toName, subject, body){
+    var c = emailConfig();
+    return fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service_id: c.serviceId,
+        template_id: c.templateId,
+        user_id: c.publicKey,
+        template_params: { to_email: toEmail, to_name: toName, subject: subject, message: body }
+      })
+    }).then(function(res){
+      if(!res.ok) return res.text().then(function(t){ throw new Error(t || ("HTTP " + res.status)); });
+      return true;
+    });
+  }
+
+  function sendReminder(empId){
+    var emp = empById(empId);
+    if(!emp){ setMsg("Open employee profile first."); return false; }
+    if(!emp.email || !isValidEmail(emp.email)){
+      setMsg("Add a valid email for this employee first, then press Send Reminder.");
+      var inp = $("crx-profile-email");
+      if(inp) inp.focus();
+      return false;
+    }
+    var due = dueCourses(emp.id);
+    if(!due.length){ setMsg("No expired or expiring courses for " + emp.name + ". Nothing to remind."); return false; }
+
+    var mail = buildReminderEmail(emp, due);
+    if(emailConfigReady()){
+      setMsg("Sending reminder to " + emp.email + "...");
+      sendViaEmailJs(emp.email, emp.name, mail.subject, mail.body).then(function(){
+        setMsg("Reminder sent to " + emp.name + " (" + emp.email + ").");
+      }).catch(function(err){
+        console.warn("EmailJS send failed, falling back to email app.", err);
+        openMailApp(emp.email, mail.subject, mail.body);
+        setMsg("Automatic sending failed — your email app was opened instead. Press send there.");
+      });
+    } else {
+      openMailApp(emp.email, mail.subject, mail.body);
+      setMsg("Email app opened with the reminder for " + emp.name + ". Press send there.");
+    }
+    return false;
+  }
+
+  function sendAllReminders(){
+    var targets = employees().map(function(e){
+      return { emp:e, due:dueCourses(e.id) };
+    }).filter(function(t){ return t.due.length; });
+
+    if(!targets.length){ setMsg("No employees have expired or expiring courses."); return false; }
+
+    var noEmail = targets.filter(function(t){ return !isValidEmail(t.emp.email); });
+    var withEmail = targets.filter(function(t){ return isValidEmail(t.emp.email); });
+
+    if(!withEmail.length){
+      setMsg(targets.length + " employee(s) need renewal but none has an email saved. Open each profile and add the email.");
+      return false;
+    }
+
+    if(!emailConfigReady()){
+      setMsg("Bulk sending needs EmailJS settings above. Or open each profile and press Send Reminder to use your email app.");
+      return false;
+    }
+
+    setMsg("Sending " + withEmail.length + " reminder(s)...");
+    var sent = 0, failed = 0, chain = Promise.resolve();
+    withEmail.forEach(function(t){
+      chain = chain.then(function(){
+        var mail = buildReminderEmail(t.emp, t.due);
+        return sendViaEmailJs(t.emp.email, t.emp.name, mail.subject, mail.body)
+          .then(function(){ sent++; })
+          .catch(function(err){ failed++; console.warn("Reminder failed for " + t.emp.name, err); });
+      });
+    });
+    chain.then(function(){
+      var msg = sent + " reminder(s) sent.";
+      if(failed) msg += " " + failed + " failed (check EmailJS settings).";
+      if(noEmail.length) msg += " " + noEmail.length + " employee(s) skipped — no email saved.";
+      setMsg(msg);
+    });
+    return false;
+  }
+
+  function saveProfileEmail(){
+    var emp = empById(selectedId());
+    if(!emp){ setMsg("Open employee profile first."); return false; }
+    var val = clean($("crx-profile-email") && $("crx-profile-email").value);
+    if(val && !isValidEmail(val)){ setMsg("Enter a valid email address."); return false; }
+    var list = employees().map(function(e){
+      if(String(e.id) === String(emp.id)) e.email = val;
+      return e;
+    });
+    saveEmployees(list);
+    renderAll();
+    setMsg(val ? "Email saved for " + emp.name + "." : "Email removed for " + emp.name + ".");
+    return false;
   }
 
   function addEmployee(){
     var input = $("crx-employee-name");
+    var emailInput = $("crx-employee-email");
     var name = clean(input && input.value);
+    var email = clean(emailInput && emailInput.value);
     if(!name){ setMsg("Enter employee name."); if(input) input.focus(); return false; }
+    if(email && !isValidEmail(email)){ setMsg("Enter a valid email address."); if(emailInput) emailInput.focus(); return false; }
 
     var list = employees();
     var emp = list.find(function(e){ return clean(e.name).toLowerCase() === name.toLowerCase(); });
     if(!emp){
-      emp = {id:uid("emp"), name:name, createdAt:new Date().toISOString()};
+      emp = {id:uid("emp"), name:name, email:email, createdAt:new Date().toISOString()};
       list.push(emp);
-      saveEmployees(list);
+    } else if(email){
+      emp.email = email;
     }
+    saveEmployees(list);
     if(input) input.value = "";
+    if(emailInput) emailInput.value = "";
     setSelected(emp.id);
     renderAll();
     setMsg("Employee saved.");
@@ -10341,7 +10721,7 @@ function initDailyJobLog(){
     var all = employees();
     if(countEl) countEl.textContent = String(all.length);
     var q = clean($("crx-search") && $("crx-search").value).toLowerCase();
-    var shown = all.filter(function(e){ return !q || e.name.toLowerCase().indexOf(q) !== -1; });
+    var shown = all.filter(function(e){ return !q || e.name.toLowerCase().indexOf(q) !== -1 || (e.email || "").toLowerCase().indexOf(q) !== -1; });
 
     if(!shown.length){
       listEl.innerHTML = '<div class="crx-empty" style="margin-top:10px">No employees saved yet.</div>';
@@ -10351,9 +10731,14 @@ function initDailyJobLog(){
     var sid = selectedId();
     listEl.innerHTML = shown.map(function(e){
       var count = courses().filter(function(c){ return String(c.empId) === String(e.id); }).length;
+      var dueCount = dueCourses(e.id).length;
       var active = String(e.id) === String(sid) ? " active" : "";
+      var emailLine = e.email
+        ? '<span class="crx-emp-email">✉ ' + esc(e.email) + '</span>'
+        : '<span class="crx-emp-email missing">✉ No email saved</span>';
+      var dueDot = dueCount ? '<span class="crx-dot" title="' + dueCount + ' course(s) need renewal"></span>' : '';
       return '<div class="crx-employee' + active + '" data-emp-id="' + esc(e.id) + '">' +
-        '<div><strong>' + esc(e.name) + '</strong><small>' + count + ' course(s)</small></div>' +
+        '<div><strong>' + esc(e.name) + dueDot + '</strong><small>' + count + ' course(s)' + (dueCount ? ' • ' + dueCount + ' need renewal' : '') + '</small>' + emailLine + '</div>' +
         '<div class="crx-actions">' +
           '<button type="button" class="crx-btn" data-open="' + esc(e.id) + '">Open</button>' +
           '<button type="button" class="crx-btn danger" data-delete-emp="' + esc(e.id) + '">Delete</button>' +
@@ -10400,6 +10785,11 @@ function initDailyJobLog(){
 
     holder.innerHTML =
       '<div class="crx-title"><div><h3>' + esc(emp.name) + '</h3><small>Courses saved inside this profile.</small></div><button id="crx-toggle-form" class="crx-btn" type="button">+ Add Course</button></div>' +
+      '<div class="crx-email-row">' +
+        '<div class="crx-field"><label>Employee Email</label><input id="crx-profile-email" class="crx-input" type="email" placeholder="name@company.com" value="' + esc(emp.email || "") + '"></div>' +
+        '<button id="crx-save-email" class="crx-btn secondary" type="button">Save Email</button>' +
+        '<button id="crx-send-reminder" class="crx-btn mail" type="button">📧 Send Reminder</button>' +
+      '</div>' +
       '<div class="crx-summary">' +
         '<div class="crx-tile"><span>Total</span><b>' + list.length + '</b></div>' +
         '<div class="crx-tile"><span>Valid</span><b>' + valid + '</b></div>' +
@@ -10426,6 +10816,9 @@ function initDailyJobLog(){
     $("crx-cancel-course").addEventListener("click", function(){ $("crx-course-form").style.display = "none"; });
     $("crx-save-course").addEventListener("click", saveCourse);
     $("crx-add-category").addEventListener("click", addCategory);
+    $("crx-save-email").addEventListener("click", saveProfileEmail);
+    $("crx-profile-email").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); saveProfileEmail(); } });
+    $("crx-send-reminder").addEventListener("click", function(){ sendReminder(emp.id); });
     fillCategorySelect();
     renderCourseList(list);
   }
@@ -10537,6 +10930,8 @@ function initDailyJobLog(){
     if(!empById(selectedId()) && employees().length) setSelected(employees()[0].id);
     buildCoursesPage();
     renderAll();
+    var needing = employees().filter(function(e){ return dueCourses(e.id).length; }).length;
+    if(needing) setMsg("⚠ " + needing + " employee(s) have courses expired or expiring within 30 days. Open the profile and press Send Reminder.");
   }
 
   // Compatibility: keep old function names working too.
