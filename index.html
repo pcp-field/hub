@@ -3067,6 +3067,56 @@ body.light-mode .offline-sync-badge.active{
 </div>
 <!-- ===== SUCKER ROD / SpaceOut Tab ===== -->
 <div class="page active" id="page-sucker">
+<!-- ===== Quick Rotor Pull-Back (PCP) — live calculator, added without touching the sections below ===== -->
+<div class="card" id="rpb-card">
+<p class="section-label">⚡ Quick Rotor Pull-Back (PCP)</p>
+<div class="field-row">
+<div class="field">
+<label>Pump Model</label>
+<select id="rpb-model"><option value="">Please Select</option></select>
+</div>
+<div class="field">
+<label>Rod Size</label>
+<select id="rpb-rod"><option value="">Please Select</option></select>
+</div>
+</div>
+<div class="field-row">
+<div class="field">
+<label>Pump Setting Depth (m)</label>
+<div class="input-with-badge">
+<input id="rpb-depth" inputmode="decimal" placeholder="e.g. 950" type="number"/>
+<span class="input-badge">m</span>
+</div>
+</div>
+<div class="field">
+<label>Pump Allowance (in) <span class="badge badge-blue">editable</span></label>
+<input id="rpb-allow" inputmode="decimal" type="number" value="10"/>
+<p class="auto-note">Min. pull-back from pump datasheet</p>
+</div>
+</div>
+<div id="rpb-results" style="display:none">
+<div class="divider"></div>
+<div class="result-grid" style="grid-template-columns:repeat(3,1fr);">
+<div class="result-box">
+<div class="r-label">Rod Stretch</div>
+<div class="r-value" id="rpb-res-stretch">—</div>
+<div class="r-unit">inches</div>
+</div>
+<div class="result-box">
+<div class="r-label">Pull-Back</div>
+<div class="r-value" id="rpb-res-total">—</div>
+<div class="r-unit">inches</div>
+</div>
+<div class="result-box">
+<div class="r-label">Pull-Back</div>
+<div class="r-value" id="rpb-res-cm">—</div>
+<div class="r-unit">cm</div>
+</div>
+</div>
+<p class="auto-note" id="rpb-summary" style="margin-top:8px;"></p>
+</div>
+<p class="auto-note" id="rpb-hint" style="margin-top:8px;">Select pump model, rod size and enter depth — result appears instantly.</p>
+</div>
 <div class="card">
 <p class="section-label">Well Info</p>
 <div class="field-row">
@@ -10355,6 +10405,117 @@ function initDailyJobLog(){
 </style>
 
 
+<script id="rotor-pullback-quick-js">
+/*
+  Quick Rotor Pull-Back (PCP) — live calculator inside the Space Out page.
+  Pump model lists match socalculator (SLB SL / FL / SH series + Others).
+  Formula (standard PCP spacing practice):
+    Rod stretch (in) = w * Lft^2 * 12 / (2 * E * A)   (rod string self-weight elongation)
+    Pull-Back (in)   = Rod stretch + Pump allowance   (allowance editable, default 10 in)
+*/
+(function(){
+  "use strict";
+
+  /* K-rating lists exactly as on the reference calculator */
+  var SL = ["3K600","3K1200","3K2400","6K650","6K1300","6K2000","6K2600","13K650","13K1300","13K1650","13K2000","13K2600","13K3300","22K600","22K1200","22K1400","22K1500","22K1800","48K600","48K900","24K650","24K1300","24K2000","24K2600","24K3300","32K750","32K1500","32K2200","40K600","40K1200","40K1400","40K1500","40K1800","40K2400","63K400","63K800","63K1200","63K1600","36K1000","36K1500","36K2000","36K3000","45K1600","45K2400","60K600","60K1200","60K1500","60K1800","60K2400","80K450","80K900","80K1150","80K1350","80K1800","100K400","100K800","100K1200","100K1600","120K300","120K600","120K900","120K1200","120K1500","175K200","175K400","175K600","175K800"];
+  var FL = ["22K600","22K1200","22K1400","22K1500","22K1800","48K600","48K900","24K1300","24K2000","24K2600","24K3300","32K750","32K1500","32K2200","40K600","40K1200","40K1400","40K1500","40K1800","40K2400","63K400","63K800","63K1200","63K1600","36K1000","36K1500","36K2000","36K3000","45K1600","45K2400","60K600","60K1200","60K1500","60K1800","60K2400","80K450","80K900","80K1150","80K1350","80K1800","100K400","100K800","100K1200","100K1600","120K300","120K600","120K900","120K1200","120K1500","175K200","175K400","175K600","175K800","150K800","150K1200","150K1600","200K860","200K1150"];
+  var SH = ["17K400","17K800","17K1200","17K1600","17K2000","13K650","13K1300","13K1650","13K2000","13K2600","13K3300","22K600","22K1200","22K1400","22K1500","22K1800","48K600","48K900","24K1300","24K2000","24K2600","24K3300","32K750","32K1500","32K2200","40K600","40K1200","40K1400","40K1500","40K1800","40K2400","63K400","63K800","63K1200","63K1600","36K1000","36K1500","36K2000","36K3000","45K1600","45K2400","60K600","60K1200","60K1500","60K1800","60K2400","80K450","80K900","80K1150","80K1350","80K1800","100K400","100K800","100K1200","100K1600","120K300","120K600","120K900","120K1200","175K200","175K400","175K600","175K800"];
+  var OTHERS = ["1.4K600","1.4K1200","1.4K1800","1.4K2400","4K600","4K1200","4K1800","4K2400","8K600","8K900","8K1200","8K1800","8K2400","8K3600","15K600","15K900","15K1200","15K1400","15K1800","15K2400","15K3600","23K600","23K900","23K1200","23K1800","23K2400","23K3600","33K600","33K900","33K1200","33K1800","33K2400","33K3600","42K600","42K900","42K1200","42K1800","42K2400","56K600","56K900","56K1200","56K1500","56K1800","76K600","76K900","76K1200","76K1500","76K1800","98K600","98K1200","98K1800","122K600","122K1200","122K1800","160K600","160K1200","160K1500"];
+
+  /* Rod data: cross-section area A (in^2) and weight w (lb/ft). Co-Rod = continuous rod (no couplings, lighter). */
+  var RODS = [
+    { label:'Sucker Rod [3/4"]',   A:0.442, w:1.634 },
+    { label:'Sucker Rod [7/8"]',   A:0.601, w:2.224 },
+    { label:'Sucker Rod [1"]',     A:0.785, w:2.904 },
+    { label:'Sucker Rod [1.1/4"]', A:1.227, w:4.538 },
+    { label:'Sucker Rod [1.1/8"]', A:0.994, w:3.676 },
+    { label:'Co_Rod [7/8"]',       A:0.601, w:2.040 },
+    { label:'Co_Rod [1"]',         A:0.785, w:2.670 },
+    { label:'Co_Rod [1.1/8"]',     A:0.994, w:3.380 }
+  ];
+
+  var E_STEEL = 30000000; /* psi */
+
+  function $(id){ return document.getElementById(id); }
+
+  function fmtModel(code, suffix){
+    /* "40K1200" -> "40 K 1200 SL" */
+    var m = code.match(/^([\d.]+)K(\d+)$/);
+    var base = m ? (m[1] + " K " + m[2]) : code;
+    return suffix ? base + " " + suffix : base;
+  }
+
+  function fillSelects(){
+    var sel = $("rpb-model");
+    if(!sel || sel.dataset.filled) return;
+    sel.dataset.filled = "1";
+    var groups = [["SL", SL, "SL"], ["FL", FL, "FL"], ["SH", SH, "SH"], ["Others", OTHERS, ""]];
+    groups.forEach(function(g){
+      var og = document.createElement("optgroup");
+      og.label = "――― " + g[0] + " ―――";
+      g[1].forEach(function(code){
+        var o = document.createElement("option");
+        o.value = fmtModel(code, g[2]);
+        o.textContent = fmtModel(code, g[2]);
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    });
+    var rodSel = $("rpb-rod");
+    if(rodSel && !rodSel.dataset.filled){
+      rodSel.dataset.filled = "1";
+      RODS.forEach(function(r, i){
+        var o = document.createElement("option");
+        o.value = String(i);
+        o.textContent = r.label;
+        rodSel.appendChild(o);
+      });
+    }
+  }
+
+  function calc(){
+    var res = $("rpb-results"), hint = $("rpb-hint");
+    if(!res) return;
+    var model = $("rpb-model").value;
+    var rodIdx = $("rpb-rod").value;
+    var depthM = parseFloat($("rpb-depth").value);
+    var allow = parseFloat($("rpb-allow").value);
+    if(isNaN(allow)) allow = 0;
+
+    if(!model || rodIdx === "" || isNaN(depthM) || depthM <= 0){
+      res.style.display = "none";
+      if(hint) hint.style.display = "block";
+      return;
+    }
+    var rod = RODS[Number(rodIdx)];
+    var Lft = depthM * 3.28084;
+    var stretchIn = (rod.w * Lft * Lft * 12) / (2 * E_STEEL * rod.A);
+    var totalIn = stretchIn + allow;
+
+    $("rpb-res-stretch").textContent = stretchIn.toFixed(2);
+    $("rpb-res-total").textContent = totalIn.toFixed(2);
+    $("rpb-res-cm").textContent = (totalIn * 2.54).toFixed(1);
+    $("rpb-summary").textContent = model + " • " + rod.label + " • PSD " + depthM + " m — pull rotor back " + totalIn.toFixed(2) + " in (" + (totalIn * 2.54).toFixed(1) + " cm) after tagging.";
+    res.style.display = "block";
+    if(hint) hint.style.display = "none";
+  }
+
+  function init(){
+    fillSelects();
+    ["rpb-model","rpb-rod","rpb-depth","rpb-allow"].forEach(function(id){
+      var el = $(id);
+      if(!el) return;
+      el.addEventListener("input", calc);
+      el.addEventListener("change", calc);
+    });
+  }
+
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+  setTimeout(init, 600); /* safety re-bind in case the page was rebuilt */
+})();
+</script>
+
 <script id="ahmed-courses-rebuild-clean-js">
 (function(){
   "use strict";
@@ -10464,25 +10625,19 @@ function initDailyJobLog(){
         '<div class="section-label">Courses Renewal</div>' +
         '<div class="crx-panel">' +
           '<div class="crx-title"><div><h3>Employee Profiles</h3><small>Add employee, open profile, then save courses inside the selected profile.</small></div><span class="auto-save-pill">Auto Save</span></div>' +
-          '<div class="crx-addgrid">' +
+          '<div class="crx-row">' +
             '<div class="crx-field"><label>Employee Name</label><input id="crx-employee-name" class="crx-input" type="text" placeholder="Ahmed Al Bakri"></div>' +
-            '<div class="crx-field"><label>Employee Email (for reminders)</label><input id="crx-employee-email" class="crx-input" type="email" placeholder="name@company.com (optional)"></div>' +
             '<button id="crx-add-employee" class="crx-btn" type="button">+ Add Employee</button>' +
           '</div>' +
           '<div id="crx-msg" class="crx-msg"></div>' +
         '</div>' +
-        '<details class="crx-settings" id="crx-email-settings">' +
-          '<summary><span>📧 Email Reminder Settings<small>Optional: connect a free EmailJS account to send reminders directly. Otherwise reminders open in your email app.</small></span><span>▾</span></summary>' +
-          '<div class="crx-settings-body">' +
-            '<div class="crx-note"><b>How it works:</b> Press <b>Send Reminder</b> inside an employee profile. If EmailJS is configured below, the email is sent automatically to the employee. If not, your device email app opens with the reminder already written — just press send. Free setup at emailjs.com: create a Service, an Email Template using variables <b>to_email, to_name, subject, message</b>, then paste the IDs here.</div>' +
-            '<div class="crx-settings-grid">' +
-              '<div class="crx-field"><label>Service ID</label><input id="crx-ejs-service" class="crx-input" type="text" placeholder="service_xxxxxxx"></div>' +
-              '<div class="crx-field"><label>Template ID</label><input id="crx-ejs-template" class="crx-input" type="text" placeholder="template_xxxxxxx"></div>' +
-              '<div class="crx-field"><label>Public Key</label><input id="crx-ejs-key" class="crx-input" type="text" placeholder="XXXXXXXXXXXXXXX"></div>' +
-            '</div>' +
-            '<div class="crx-row"><button id="crx-ejs-save" class="crx-btn" type="button">Save Email Settings</button><button id="crx-send-all" class="crx-btn mail" type="button">📧 Send Reminders To All Due</button></div>' +
+        '<div class="crx-panel" id="crx-notify-panel">' +
+          '<div class="crx-title"><div><h3>🔔 Expiry Notifications</h3><small>Get a notification on this phone when any employee has a course expired or expiring within 30 days. Checked automatically every time the site is opened.</small></div><span id="crx-notify-state" class="auto-save-pill" style="background:rgba(139,148,158,.15);color:var(--text2);">Off</span></div>' +
+          '<div class="crx-row">' +
+            '<button id="crx-notify-enable" class="crx-btn" type="button">🔔 Enable Notifications</button>' +
+            '<button id="crx-notify-test" class="crx-btn secondary" type="button">Send Test Notification</button>' +
           '</div>' +
-        '</details>' +
+        '</div>' +
         '<div class="crx-grid">' +
           '<div class="crx-panel">' +
             '<div class="crx-title"><div><h3>Employees</h3><small>Tap employee or Open to view profile.</small></div><span id="crx-count" class="count-pill">0</span></div>' +
@@ -10497,44 +10652,121 @@ function initDailyJobLog(){
 
     $("crx-add-employee").addEventListener("click", addEmployee);
     $("crx-employee-name").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); addEmployee(); } });
-    $("crx-employee-email").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); addEmployee(); } });
     $("crx-search").addEventListener("input", renderEmployees);
-    $("crx-ejs-save").addEventListener("click", saveEmailConfig);
-    $("crx-send-all").addEventListener("click", sendAllReminders);
-    fillEmailConfigInputs();
+    $("crx-notify-enable").addEventListener("click", enableNotifications);
+    $("crx-notify-test").addEventListener("click", sendTestNotification);
+    updateNotifyUI();
   }
 
-  /* ===== Email reminder support ===== */
-  var EJS_KEY = "crxEmailJsConfig";
+  /* ===== Phone / device notifications for course expiry ===== */
+  var NOTIFY_KEY = "crxNotifyEnabled";
+  var NOTIFY_DAY_KEY = "crxLastNotifyDay";
 
-  function emailConfig(){
-    try{
-      var c = JSON.parse(localStorage.getItem(EJS_KEY) || "{}") || {};
-      return { serviceId:clean(c.serviceId), templateId:clean(c.templateId), publicKey:clean(c.publicKey) };
-    }catch(e){ return { serviceId:"", templateId:"", publicKey:"" }; }
+  /* Service worker enables notifications on Android Chrome (requires sw.js next to index.html on the host). Fails silently if unavailable. */
+  if("serviceWorker" in navigator){
+    try{ navigator.serviceWorker.register("./sw.js").catch(function(){}); }catch(e){}
   }
-  function emailConfigReady(){
-    var c = emailConfig();
-    return !!(c.serviceId && c.templateId && c.publicKey);
+
+  function notifySupported(){ return "Notification" in window; }
+
+  function updateNotifyUI(){
+    var pill = $("crx-notify-state");
+    var btn = $("crx-notify-enable");
+    if(!pill || !btn) return;
+    if(!notifySupported()){
+      pill.textContent = "Not Supported";
+      pill.style.cssText = "background:rgba(248,81,73,.14);color:var(--red);";
+      btn.disabled = true;
+      return;
+    }
+    if(Notification.permission === "granted" && localStorage.getItem(NOTIFY_KEY) === "1"){
+      pill.textContent = "• On";
+      pill.style.cssText = "background:rgba(63,185,80,.14);color:var(--green);";
+      btn.textContent = "🔔 Notifications Enabled";
+    } else if(Notification.permission === "denied"){
+      pill.textContent = "Blocked";
+      pill.style.cssText = "background:rgba(248,81,73,.14);color:var(--red);";
+      btn.textContent = "🔔 Enable Notifications";
+    } else {
+      pill.textContent = "Off";
+      pill.style.cssText = "background:rgba(139,148,158,.15);color:var(--text2);";
+      btn.textContent = "🔔 Enable Notifications";
+    }
   }
-  function fillEmailConfigInputs(){
-    var c = emailConfig();
-    if($("crx-ejs-service")) $("crx-ejs-service").value = c.serviceId;
-    if($("crx-ejs-template")) $("crx-ejs-template").value = c.templateId;
-    if($("crx-ejs-key")) $("crx-ejs-key").value = c.publicKey;
-  }
-  function saveEmailConfig(){
-    var c = {
-      serviceId: clean($("crx-ejs-service") && $("crx-ejs-service").value),
-      templateId: clean($("crx-ejs-template") && $("crx-ejs-template").value),
-      publicKey: clean($("crx-ejs-key") && $("crx-ejs-key").value)
-    };
-    localStorage.setItem(EJS_KEY, JSON.stringify(c));
-    setMsg(emailConfigReady() ? "Email settings saved. Reminders will be sent automatically." : "Settings saved. Fill all 3 fields for automatic sending; email app will be used meanwhile.");
+
+  function enableNotifications(){
+    if(!notifySupported()){ setMsg("This browser does not support notifications."); return false; }
+    if(Notification.permission === "denied"){
+      setMsg("Notifications are blocked. Allow them for this site from the browser settings, then try again.");
+      updateNotifyUI();
+      return false;
+    }
+    Notification.requestPermission().then(function(p){
+      if(p === "granted"){
+        localStorage.setItem(NOTIFY_KEY, "1");
+        setMsg("Notifications enabled. You will be alerted when any course is expired or expiring within 30 days.");
+        checkAndNotify(true);
+      } else {
+        setMsg("Notification permission was not granted.");
+      }
+      updateNotifyUI();
+    });
     return false;
   }
 
-  function isValidEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || "").trim()); }
+  function showSystemNotification(title, body){
+    var opts = { body: body, tag: "crx-" + title, renotify: false };
+    function direct(){
+      try{ new Notification(title, opts); }
+      catch(e){ setMsg(title + " — " + body); }
+    }
+    if(navigator.serviceWorker && navigator.serviceWorker.getRegistration){
+      navigator.serviceWorker.getRegistration().then(function(reg){
+        if(reg && reg.showNotification) reg.showNotification(title, opts);
+        else direct();
+      }).catch(direct);
+    } else direct();
+  }
+
+  function dueTargets(){
+    return employees().map(function(e){
+      return { emp: e, due: dueCourses(e.id) };
+    }).filter(function(t){ return t.due.length; });
+  }
+
+  function checkAndNotify(force){
+    if(!notifySupported()) return;
+    if(Notification.permission !== "granted") return;
+    if(localStorage.getItem(NOTIFY_KEY) !== "1") return;
+    var today = new Date().toISOString().slice(0, 10);
+    if(!force && localStorage.getItem(NOTIFY_DAY_KEY) === today) return;
+
+    var targets = dueTargets();
+    if(!targets.length) return;
+    localStorage.setItem(NOTIFY_DAY_KEY, today);
+
+    targets.slice(0, 5).forEach(function(t){
+      var lines = t.due.slice(0, 4).map(function(c){
+        return c.name + ": " + statusFor(c.expiry).text;
+      });
+      if(t.due.length > 4) lines.push("+" + (t.due.length - 4) + " more course(s)");
+      showSystemNotification("Course Renewal — " + t.emp.name, lines.join("\n"));
+    });
+    if(targets.length > 5){
+      showSystemNotification("Course Renewal", (targets.length - 5) + " more employee(s) also have courses needing renewal.");
+    }
+  }
+
+  function sendTestNotification(){
+    if(!notifySupported()){ setMsg("This browser does not support notifications."); return false; }
+    if(Notification.permission !== "granted"){
+      setMsg("Enable notifications first.");
+      return false;
+    }
+    showSystemNotification("Course Renewal — Test", "Notifications are working. You will be alerted here when a course is near expiry.");
+    setMsg("Test notification sent.");
+    return false;
+  }
 
   function dueCourses(empId){
     return courses().filter(function(c){
@@ -10544,152 +10776,19 @@ function initDailyJobLog(){
     }).sort(function(a,b){ return String(a.expiry).localeCompare(String(b.expiry)); });
   }
 
-  function buildReminderEmail(emp, list){
-    var lines = list.map(function(c){
-      var st = statusFor(c.expiry);
-      return "- " + c.name + " (" + (c.category || "Other") + "): expiry " + fmtDate(c.expiry) + " — " + st.text;
-    });
-    var subject = "Course Renewal Reminder - " + emp.name;
-    var body =
-      "Dear " + emp.name + ",\r\n\r\n" +
-      "This is a reminder that the following course(s) registered under your name are expired or will expire soon:\r\n\r\n" +
-      lines.join("\r\n") + "\r\n\r\n" +
-      "Please arrange the renewal before the expiry date.\r\n\r\n" +
-      "Regards,\r\nPCP Field Reports Hub";
-    return { subject: subject, body: body };
-  }
-
-  function openMailApp(toEmail, subject, body){
-    var href = "mailto:" + encodeURIComponent(toEmail) +
-      "?subject=" + encodeURIComponent(subject) +
-      "&body=" + encodeURIComponent(body);
-    var a = document.createElement("a");
-    a.href = href;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ a.remove(); }, 0);
-  }
-
-  function sendViaEmailJs(toEmail, toName, subject, body){
-    var c = emailConfig();
-    return fetch("https://api.emailjs.com/api/v1.0/email/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        service_id: c.serviceId,
-        template_id: c.templateId,
-        user_id: c.publicKey,
-        template_params: { to_email: toEmail, to_name: toName, subject: subject, message: body }
-      })
-    }).then(function(res){
-      if(!res.ok) return res.text().then(function(t){ throw new Error(t || ("HTTP " + res.status)); });
-      return true;
-    });
-  }
-
-  function sendReminder(empId){
-    var emp = empById(empId);
-    if(!emp){ setMsg("Open employee profile first."); return false; }
-    if(!emp.email || !isValidEmail(emp.email)){
-      setMsg("Add a valid email for this employee first, then press Send Reminder.");
-      var inp = $("crx-profile-email");
-      if(inp) inp.focus();
-      return false;
-    }
-    var due = dueCourses(emp.id);
-    if(!due.length){ setMsg("No expired or expiring courses for " + emp.name + ". Nothing to remind."); return false; }
-
-    var mail = buildReminderEmail(emp, due);
-    if(emailConfigReady()){
-      setMsg("Sending reminder to " + emp.email + "...");
-      sendViaEmailJs(emp.email, emp.name, mail.subject, mail.body).then(function(){
-        setMsg("Reminder sent to " + emp.name + " (" + emp.email + ").");
-      }).catch(function(err){
-        console.warn("EmailJS send failed, falling back to email app.", err);
-        openMailApp(emp.email, mail.subject, mail.body);
-        setMsg("Automatic sending failed — your email app was opened instead. Press send there.");
-      });
-    } else {
-      openMailApp(emp.email, mail.subject, mail.body);
-      setMsg("Email app opened with the reminder for " + emp.name + ". Press send there.");
-    }
-    return false;
-  }
-
-  function sendAllReminders(){
-    var targets = employees().map(function(e){
-      return { emp:e, due:dueCourses(e.id) };
-    }).filter(function(t){ return t.due.length; });
-
-    if(!targets.length){ setMsg("No employees have expired or expiring courses."); return false; }
-
-    var noEmail = targets.filter(function(t){ return !isValidEmail(t.emp.email); });
-    var withEmail = targets.filter(function(t){ return isValidEmail(t.emp.email); });
-
-    if(!withEmail.length){
-      setMsg(targets.length + " employee(s) need renewal but none has an email saved. Open each profile and add the email.");
-      return false;
-    }
-
-    if(!emailConfigReady()){
-      setMsg("Bulk sending needs EmailJS settings above. Or open each profile and press Send Reminder to use your email app.");
-      return false;
-    }
-
-    setMsg("Sending " + withEmail.length + " reminder(s)...");
-    var sent = 0, failed = 0, chain = Promise.resolve();
-    withEmail.forEach(function(t){
-      chain = chain.then(function(){
-        var mail = buildReminderEmail(t.emp, t.due);
-        return sendViaEmailJs(t.emp.email, t.emp.name, mail.subject, mail.body)
-          .then(function(){ sent++; })
-          .catch(function(err){ failed++; console.warn("Reminder failed for " + t.emp.name, err); });
-      });
-    });
-    chain.then(function(){
-      var msg = sent + " reminder(s) sent.";
-      if(failed) msg += " " + failed + " failed (check EmailJS settings).";
-      if(noEmail.length) msg += " " + noEmail.length + " employee(s) skipped — no email saved.";
-      setMsg(msg);
-    });
-    return false;
-  }
-
-  function saveProfileEmail(){
-    var emp = empById(selectedId());
-    if(!emp){ setMsg("Open employee profile first."); return false; }
-    var val = clean($("crx-profile-email") && $("crx-profile-email").value);
-    if(val && !isValidEmail(val)){ setMsg("Enter a valid email address."); return false; }
-    var list = employees().map(function(e){
-      if(String(e.id) === String(emp.id)) e.email = val;
-      return e;
-    });
-    saveEmployees(list);
-    renderAll();
-    setMsg(val ? "Email saved for " + emp.name + "." : "Email removed for " + emp.name + ".");
-    return false;
-  }
-
-  function addEmployee(){
+        function addEmployee(){
     var input = $("crx-employee-name");
-    var emailInput = $("crx-employee-email");
     var name = clean(input && input.value);
-    var email = clean(emailInput && emailInput.value);
     if(!name){ setMsg("Enter employee name."); if(input) input.focus(); return false; }
-    if(email && !isValidEmail(email)){ setMsg("Enter a valid email address."); if(emailInput) emailInput.focus(); return false; }
 
     var list = employees();
     var emp = list.find(function(e){ return clean(e.name).toLowerCase() === name.toLowerCase(); });
     if(!emp){
-      emp = {id:uid("emp"), name:name, email:email, createdAt:new Date().toISOString()};
+      emp = {id:uid("emp"), name:name, createdAt:new Date().toISOString()};
       list.push(emp);
-    } else if(email){
-      emp.email = email;
+      saveEmployees(list);
     }
-    saveEmployees(list);
     if(input) input.value = "";
-    if(emailInput) emailInput.value = "";
     setSelected(emp.id);
     renderAll();
     setMsg("Employee saved.");
@@ -10733,12 +10832,9 @@ function initDailyJobLog(){
       var count = courses().filter(function(c){ return String(c.empId) === String(e.id); }).length;
       var dueCount = dueCourses(e.id).length;
       var active = String(e.id) === String(sid) ? " active" : "";
-      var emailLine = e.email
-        ? '<span class="crx-emp-email">✉ ' + esc(e.email) + '</span>'
-        : '<span class="crx-emp-email missing">✉ No email saved</span>';
       var dueDot = dueCount ? '<span class="crx-dot" title="' + dueCount + ' course(s) need renewal"></span>' : '';
       return '<div class="crx-employee' + active + '" data-emp-id="' + esc(e.id) + '">' +
-        '<div><strong>' + esc(e.name) + dueDot + '</strong><small>' + count + ' course(s)' + (dueCount ? ' • ' + dueCount + ' need renewal' : '') + '</small>' + emailLine + '</div>' +
+        '<div><strong>' + esc(e.name) + dueDot + '</strong><small>' + count + ' course(s)' + (dueCount ? ' • ' + dueCount + ' need renewal' : '') + '</small></div>' +
         '<div class="crx-actions">' +
           '<button type="button" class="crx-btn" data-open="' + esc(e.id) + '">Open</button>' +
           '<button type="button" class="crx-btn danger" data-delete-emp="' + esc(e.id) + '">Delete</button>' +
@@ -10785,11 +10881,6 @@ function initDailyJobLog(){
 
     holder.innerHTML =
       '<div class="crx-title"><div><h3>' + esc(emp.name) + '</h3><small>Courses saved inside this profile.</small></div><button id="crx-toggle-form" class="crx-btn" type="button">+ Add Course</button></div>' +
-      '<div class="crx-email-row">' +
-        '<div class="crx-field"><label>Employee Email</label><input id="crx-profile-email" class="crx-input" type="email" placeholder="name@company.com" value="' + esc(emp.email || "") + '"></div>' +
-        '<button id="crx-save-email" class="crx-btn secondary" type="button">Save Email</button>' +
-        '<button id="crx-send-reminder" class="crx-btn mail" type="button">📧 Send Reminder</button>' +
-      '</div>' +
       '<div class="crx-summary">' +
         '<div class="crx-tile"><span>Total</span><b>' + list.length + '</b></div>' +
         '<div class="crx-tile"><span>Valid</span><b>' + valid + '</b></div>' +
@@ -10816,9 +10907,6 @@ function initDailyJobLog(){
     $("crx-cancel-course").addEventListener("click", function(){ $("crx-course-form").style.display = "none"; });
     $("crx-save-course").addEventListener("click", saveCourse);
     $("crx-add-category").addEventListener("click", addCategory);
-    $("crx-save-email").addEventListener("click", saveProfileEmail);
-    $("crx-profile-email").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); saveProfileEmail(); } });
-    $("crx-send-reminder").addEventListener("click", function(){ sendReminder(emp.id); });
     fillCategorySelect();
     renderCourseList(list);
   }
@@ -10931,7 +11019,8 @@ function initDailyJobLog(){
     buildCoursesPage();
     renderAll();
     var needing = employees().filter(function(e){ return dueCourses(e.id).length; }).length;
-    if(needing) setMsg("⚠ " + needing + " employee(s) have courses expired or expiring within 30 days. Open the profile and press Send Reminder.");
+    if(needing) setMsg("⚠ " + needing + " employee(s) have courses expired or expiring within 30 days.");
+    checkAndNotify(false);
   }
 
   // Compatibility: keep old function names working too.
