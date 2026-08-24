@@ -1,0 +1,167 @@
+/* PCP Hub Service Worker — Course Renewal mobile UI + reminders */
+"use strict";
+
+var DB_NAME = "PCPCourseNotify";
+var DB_VERSION = 1;
+var DB_STORE = "state";
+var SYNC_TAG = "pcp-course-reminders";
+var THRESHOLDS = [30,14,7,3,1,0];
+var COURSE_UI_SRC = "./course-renewal-mobile.js?v=20260824-1";
+
+self.addEventListener("install", function(){ self.skipWaiting(); });
+self.addEventListener("activate", function(event){ event.waitUntil(self.clients.claim()); });
+
+/*
+  Keep index.html untouched. The existing page already registers ./sw.js at
+  startup. Once this worker controls navigation it adds one external script
+  that replaces only #page-courses with the simpler mobile-first UI.
+*/
+self.addEventListener("fetch", function(event){
+  var req = event.request;
+  if(req.mode !== "navigate" || req.method !== "GET") return;
+  event.respondWith((async function(){
+    try{
+      var response = await fetch(req);
+      var type = response.headers.get("content-type") || "";
+      if(!response.ok || type.indexOf("text/html") === -1) return response;
+      var html = await response.text();
+      if(html.indexOf('id="page-courses"') === -1 || html.indexOf("course-renewal-mobile.js") !== -1){
+        return new Response(html,{status:response.status,statusText:response.statusText,headers:response.headers});
+      }
+      var tag = '<script src="'+COURSE_UI_SRC+'"></script>';
+      html = /<\/body\s*>/i.test(html) ? html.replace(/<\/body\s*>/i, tag+"</body>") : html+tag;
+      var headers = new Headers(response.headers);
+      headers.delete("content-length");
+      headers.delete("content-encoding");
+      return new Response(html,{status:response.status,statusText:response.statusText,headers:headers});
+    }catch(err){
+      return fetch(req);
+    }
+  })());
+});
+
+function openDb(){
+  return new Promise(function(resolve,reject){
+    var req=indexedDB.open(DB_NAME,DB_VERSION);
+    req.onupgradeneeded=function(e){
+      var db=e.target.result;
+      if(!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE,{keyPath:"key"});
+    };
+    req.onsuccess=function(){resolve(req.result);};
+    req.onerror=function(){reject(req.error);};
+  });
+}
+function readState(db,key){
+  return new Promise(function(resolve,reject){
+    var req=db.transaction(DB_STORE,"readonly").objectStore(DB_STORE).get(key);
+    req.onsuccess=function(){resolve(req.result ? req.result.value : null);};
+    req.onerror=function(){reject(req.error);};
+  });
+}
+function writeState(db,key,value){
+  return new Promise(function(resolve,reject){
+    var req=db.transaction(DB_STORE,"readwrite").objectStore(DB_STORE).put({key:key,value:value});
+    req.onsuccess=function(){resolve();};
+    req.onerror=function(){reject(req.error);};
+  });
+}
+async function broadcast(type,data){
+  var list=await self.clients.matchAll({type:"window",includeUncontrolled:true});
+  list.forEach(function(client){
+    try{ client.postMessage(Object.assign({type:type},data||{})); }catch(e){}
+  });
+}
+function parseDateOnly(str){
+  var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(str||"").trim());
+  if(!m) return null;
+  var y=Number(m[1]),mo=Number(m[2])-1,d=Number(m[3]);
+  var dt=new Date(y,mo,d); dt.setHours(0,0,0,0);
+  if(dt.getFullYear()!==y || dt.getMonth()!==mo || dt.getDate()!==d) return null;
+  return dt;
+}
+function daysUntil(expiry){
+  var e=parseDateOnly(expiry); if(!e) return null;
+  var n=new Date(); n.setHours(0,0,0,0);
+  return Math.round((e.getTime()-n.getTime())/86400000);
+}
+function dueThreshold(days, settings){
+  var enabled=(settings&&settings.thresholds)||{};
+  if(days<0) return enabled.expired===false ? null : "expired";
+  for(var i=THRESHOLDS.length-1;i>=0;i--){
+    var t=THRESHOLDS[i];
+    if(days<=t && enabled[String(t)]!==false) return String(t);
+  }
+  return null;
+}
+function textFor(course,threshold,days){
+  var who=course.employeeName||"Employee", name=course.name||"Course";
+  if(threshold==="expired") return {title:"Course Renewal Required",body:who+" — "+name+" has expired."};
+  if(days===0) return {title:"Course Expires Today",body:who+" — "+name+" expires today."};
+  return {title:"Course Renewal Reminder",body:who+" — "+name+" expires in "+days+" day"+(days===1?"":"s")+"."};
+}
+async function sweep(){
+  var db=await openDb();
+  var courses=(await readState(db,"courses"))||[];
+  var settings=(await readState(db,"settings"))||{};
+  var log=(await readState(db,"log"))||{};
+  var workerLog=(await readState(db,"workerLog"))||{};
+  log=Object.assign({},log,workerLog);
+  if(!settings.enabled){ db.close(); return; }
+  var changed=false;
+  for(var i=0;i<courses.length;i++){
+    var c=courses[i]||{}, days=daysUntil(c.expiry);
+    if(days===null) continue;
+    var threshold=dueThreshold(days,settings); if(threshold===null) continue;
+    var key=String(c.id)+"|"+String(c.expiry)+"|"+String(threshold);
+    if(log[key]) continue;
+    var text=textFor(c,threshold,days);
+    await self.registration.showNotification(text.title,{
+      body:text.body,
+      tag:"pcp-course-"+c.id+"-"+threshold,
+      requireInteraction:threshold==="expired",
+      data:{courseId:String(c.id||""),employeeId:String(c.empId||""),url:"./index.html?page=courses"}
+    });
+    log[key]=new Date().toISOString(); changed=true;
+  }
+  if(changed){
+    await writeState(db,"log",log);
+    await writeState(db,"workerLog",log);
+    await broadcast("PCP_NOTIFY_LOG");
+  }
+  db.close();
+}
+
+self.addEventListener("periodicsync",function(event){ if(event.tag===SYNC_TAG) event.waitUntil(sweep()); });
+self.addEventListener("sync",function(event){ if(event.tag===SYNC_TAG) event.waitUntil(sweep()); });
+
+self.addEventListener("push",function(event){
+  var data={};
+  try{ data=event.data ? event.data.json() : {}; }
+  catch(e){ data={body:event.data ? event.data.text() : ""}; }
+  var title=data.title||"Course Renewal Reminder";
+  var options={
+    body:data.body||"A course needs your attention.",
+    tag:data.tag||"pcp-course-push",
+    requireInteraction:!!data.requireInteraction,
+    data:{courseId:String(data.courseId||""),employeeId:String(data.employeeId||""),url:data.url||"./index.html?page=courses"}
+  };
+  event.waitUntil(self.registration.showNotification(title,options));
+});
+
+self.addEventListener("notificationclick",function(event){
+  event.notification.close();
+  var data=event.notification.data||{};
+  var url="./index.html?page=courses";
+  if(data.employeeId) url+="&emp="+encodeURIComponent(data.employeeId);
+  if(data.courseId) url+="&course="+encodeURIComponent(data.courseId);
+  event.waitUntil(self.clients.matchAll({type:"window",includeUncontrolled:true}).then(function(list){
+    for(var i=0;i<list.length;i++){
+      var client=list[i];
+      if("focus" in client){
+        client.postMessage({type:"PCP_OPEN_COURSE",employeeId:data.employeeId||"",courseId:data.courseId||""});
+        return client.focus();
+      }
+    }
+    return self.clients.openWindow ? self.clients.openWindow(url) : null;
+  }));
+});
