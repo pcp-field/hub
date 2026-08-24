@@ -1,4 +1,4 @@
-name: Inject Course Save v6
+name: Inject Mobile Fixes
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/inject-course-save-v6.yml'
       - 'course-save-direct-v6.js'
+      - 'file-manager-direct-v7.js'
 
 permissions:
   contents: write
@@ -17,20 +18,29 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Replace v5 with v6 in index
+      - name: Inject direct mobile scripts into index
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('index.html')
           text = p.read_text(encoding='utf-8')
+
           old = '<script src="./course-save-direct-v5.js?v=20260824-1713"></script>'
-          tag = '<script src="./course-save-direct-v6.js?v=20260824-1720"></script>'
+          course = '<script src="./course-save-direct-v6.js?v=20260824-1720"></script>'
+          files = '<script src="./file-manager-direct-v7.js?v=20260824-1726"></script>'
+
           if old in text:
-              text = text.replace(old, tag, 1)
-          elif tag not in text:
+              text = text.replace(old, course, 1)
+          elif course not in text:
               if '</body>' not in text:
                   raise SystemExit('Could not find </body> in index.html')
-              text = text.replace('</body>', tag + '\n</body>', 1)
+              text = text.replace('</body>', course + '\n</body>', 1)
+
+          if files not in text:
+              if '</body>' not in text:
+                  raise SystemExit('Could not find </body> in index.html')
+              text = text.replace('</body>', files + '\n</body>', 1)
+
           p.write_text(text, encoding='utf-8')
           PY
       - name: Commit index update
@@ -42,5 +52,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
-          git commit -m "Auto-open calendar after mobile course save"
+          git commit -m "Load mobile file manager v7"
           git push
