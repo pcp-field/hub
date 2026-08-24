@@ -11,10 +11,10 @@ function load(src,id,done){
   document.head.appendChild(s);
 }
 function runtime(){
-  load("./pcp-runtime-v4.js?v=20260824-5","pcp-runtime-v4");
+  load("./pcp-runtime-v4.js?v=20260824-6","pcp-runtime-v4");
 }
 function hotfix(){
-  load("./course-renewal-hotfix-v3.js?v=20260824-3","crm-hotfix-v3",runtime);
+  load("./course-renewal-hotfix-v3.js?v=20260824-6","crm-hotfix-v31",runtime);
 }
 if(window.PCP_COURSE_MOBILE) hotfix();
 else load("./course-renewal-mobile.js?v=20260824-2","crm-mobile-v2",hotfix);
