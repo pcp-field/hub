@@ -1,0 +1,43 @@
+name: Inject Course Save v5
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inject-course-save-v5.yml'
+      - 'course-save-direct-v5.js'
+
+permissions:
+  contents: write
+
+jobs:
+  inject:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Inject direct course save script into index
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          text = p.read_text(encoding='utf-8')
+          tag = '<script src="./course-save-direct-v5.js?v=20260824-1713"></script>'
+          if tag not in text:
+              if '</body>' not in text:
+                  raise SystemExit('Could not find </body> in index.html')
+              text = text.replace('</body>', tag + '\n</body>', 1)
+              p.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit index update
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "index.html already patched"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Load direct course save v5 from index"
+          git push
