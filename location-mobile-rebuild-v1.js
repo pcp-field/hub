@@ -11,7 +11,7 @@
     if(html!=null) node.innerHTML=html;
     return node;
   }
-  function text(elm, value){ if(elm) elm.textContent=value; }
+  function text(elm, value){ if(elm && elm.textContent!==value) elm.textContent=value; }
 
   function addCss(){
     if($('locx-mobile-v1-css')) return;
@@ -199,6 +199,7 @@
     importBox.appendChild(importBody);
     shell.appendChild(importBox);
 
+    resultBox.classList.remove('card');
     resultBox.classList.add('locx-result');
     var rh=el('div','locx-result-head');
     rh.appendChild(resultName);
