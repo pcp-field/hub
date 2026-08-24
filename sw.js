@@ -2,7 +2,7 @@
 "use strict";
 var DB_NAME="PCPCourseNotify",DB_VERSION=1,DB_STORE="state",SYNC_TAG="pcp-course-reminders";
 var THRESHOLDS=[30,14,7,3,1,0];
-var COURSE_UI_SRC="./course-renewal-loader-v3.js?v=20260824-3";
+var COURSE_UI_SRC="./course-renewal-loader-v4.js?v=20260824-4";
 self.addEventListener("install",function(){self.skipWaiting()});
 self.addEventListener("activate",function(event){event.waitUntil(self.clients.claim())});
 self.addEventListener("fetch",function(event){var req=event.request;if(req.mode!=="navigate"||req.method!=="GET")return;event.respondWith((async function(){try{var response=await fetch(req);var type=response.headers.get("content-type")||"";if(!response.ok||type.indexOf("text/html")===-1)return response;var html=await response.text();if(html.indexOf('id="page-courses"')!==-1&&html.indexOf("course-renewal-mobile.js")===-1){var tag='<script src="'+COURSE_UI_SRC+'"></script>';html=/<\/body\s*>/i.test(html)?html.replace(/<\/body\s*>/i,tag+"</body>"):html+tag}var headers=new Headers(response.headers);headers.delete("content-length");headers.delete("content-encoding");return new Response(html,{status:response.status,statusText:response.statusText,headers:headers})}catch(err){return fetch(req)}})())});
