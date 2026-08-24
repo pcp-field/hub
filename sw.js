@@ -2,7 +2,7 @@
 "use strict";
 var DB_NAME="PCPCourseNotify",DB_VERSION=1,DB_STORE="state",SYNC_TAG="pcp-course-reminders";
 var THRESHOLDS=[30,14,7,3,1,0];
-var COURSE_UI_SRC="./course-renewal-loader-v4.js?v=20260824-7";
+var COURSE_UI_SRC="./course-renewal-loader-v4.js?v=20260824-8";
 var FILE_UI_SRC="./files-mobile-rebuild-v8.js?v=20260824-1845";
 self.addEventListener("install",function(){self.skipWaiting()});
 self.addEventListener("activate",function(event){event.waitUntil(self.clients.claim())});
