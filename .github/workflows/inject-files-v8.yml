@@ -1,0 +1,43 @@
+name: Inject Files v8
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inject-files-v8.yml'
+      - 'file-manager-direct-v8.js'
+
+permissions:
+  contents: write
+
+jobs:
+  inject:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Replace Files v7 with v8
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          text = p.read_text(encoding='utf-8')
+          old = '<script src="./file-manager-direct-v7.js?v=20260824-1726"></script>'
+          new = '<script src="./file-manager-direct-v8.js?v=20260824-1735"></script>'
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              if '</body>' not in text:
+                  raise SystemExit('Could not find </body>')
+              text = text.replace('</body>', new + '\n</body>', 1)
+          p.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit index update
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Use iOS-safe file sharing v8"
+          git push
