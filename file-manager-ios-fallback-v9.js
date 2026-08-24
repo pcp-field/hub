@@ -1,30 +1,9 @@
-/* PCP Hub — Files iPhone fallback v9 */
+/* PCP Hub — Files v9 compatibility loader */
 (function(){
 "use strict";
-if(window.__PCP_FILES_IOS_V9__) return;
-window.__PCP_FILES_IOS_V9__=true;
-
-var DB_NAME="PCPFieldReportsHubLocalFilesDB", STORE="pdfFiles", dbPromise=null, cache=new Map(), selected=new Set();
-function $(id){return document.getElementById(id)}
-function clean(v){return String(v==null?"":v).trim()}
-function isIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent||"")||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1)}
-function status(t){var e=$("files-status");if(e)e.textContent=t||""}
-function safeName(n){n=clean(n||"attachment.pdf").replace(/[\\/:*?"<>|]/g,"_").replace(/[\u0000-\u001f]/g,"");return n||"attachment.pdf"}
-function ext(n){var m=/\.([A-Za-z0-9]{1,12})$/.exec(safeName(n));return m?m[1].toLowerCase():""}
-function mime(n,t){var e=ext(n);return ({pdf:"application/pdf",png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",doc:"application/msword",docx:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",xls:"application/vnd.ms-excel",xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",ppt:"application/vnd.ms-powerpoint",pptx:"application/vnd.openxmlformats-officedocument.presentationml.presentation",txt:"text/plain",zip:"application/zip"})[e]||clean(t)||"application/octet-stream"}
-function openDb(){if(dbPromise)return dbPromise;dbPromise=new Promise(function(res,rej){var r=indexedDB.open(DB_NAME,1);r.onupgradeneeded=function(ev){var db=ev.target.result;if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE,{keyPath:"id"})};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}});return dbPromise}
-function getAll(){return openDb().then(function(db){return new Promise(function(res,rej){var r=db.transaction(STORE,"readonly").objectStore(STORE).getAll();r.onsuccess=function(){res(r.result||[])};r.onerror=function(){rej(r.error)}})})}
-async function memoryFile(rec){if(!rec||!rec.blob)return null;var name=safeName(rec.name||rec.blob.name), type=mime(name,rec.type||rec.blob.type);try{var buf=await rec.blob.arrayBuffer();return new File([buf],name,{type:type,lastModified:Date.now()})}catch(e){return null}}
-async function refresh(){try{var rows=await getAll();cache.clear();rows.forEach(function(r){cache.set(String(r.id),r)});patch()}catch(e){console.error("[FILES IOS V9]",e)}}
-function download(file){if(!file)return;var u=URL.createObjectURL(file),a=document.createElement("a");a.href=u;a.download=file.name||"attachment";a.style.display="none";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000)}
-async function saveOne(id){var rec=cache.get(String(id));if(!rec){status("File is still loading. Try again.");await refresh();return}var f=await memoryFile(rec);if(!f){status("Could not prepare this file.");return}download(f);status("Saved to Downloads as “"+f.name+"”. Open Files → Downloads → Share → WhatsApp.")}
-async function saveSelected(){var ids=Array.from(selected);if(!ids.length){status("Select at least one file first.");return}var ok=0;for(var i=0;i<ids.length;i++){var rec=cache.get(String(ids[i]));var f=await memoryFile(rec);if(f){download(f);ok++;await new Promise(function(r){setTimeout(r,180)})}}status(ok+" file(s) saved to Downloads. Open Files → Downloads, select them together, then Share → WhatsApp.")}
-function patch(){if(!isIOS())return;var list=$("file-list");if(!list)return;list.querySelectorAll(".file-item").forEach(function(item){var any=item.querySelector("[data-file-id]");if(!any)return;var id=String(any.getAttribute("data-file-id")||"");var share=item.querySelector('[data-file-action="share"],[data-action="share"]');if(share){share.textContent="Save for WhatsApp";share.setAttribute("data-ios-save-v9",id)}});
- var bar=$("files-toolbar-v7");if(bar){var b=$("files-share-selected-v7");if(b){b.textContent=selected.size?"Save selected ("+selected.size+")":"Save selected";b.setAttribute("data-ios-save-selected-v9","1")}var c=$("files-selected-v7");if(c)c.textContent=selected.size?selected.size+" selected":"Select files, then save them together"}
- if(!$("files-ios-note-v9")){var n=document.createElement("div");n.id="files-ios-note-v9";n.textContent="iPhone: WhatsApp may reject direct browser attachments. Save to Files first, then share from the Files app.";n.style.cssText="font-size:12px;line-height:1.5;color:var(--text2);padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin:10px 0;background:var(--bg3)";list.parentNode.insertBefore(n,list)}
-}
-function click(e){if(!isIOS())return;var one=e.target&&e.target.closest?e.target.closest("[data-ios-save-v9]"):null;if(one){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();saveOne(one.getAttribute("data-ios-save-v9"));return}var many=e.target&&e.target.closest?e.target.closest("[data-ios-save-selected-v9]"):null;if(many){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();saveSelected();return}}
-function change(e){if(!isIOS())return;var t=e.target;if(t&&t.matches&&t.matches("#file-list .select-icon[data-file-id]")){var id=String(t.getAttribute("data-file-id"));if(t.checked)selected.add(id);else selected.delete(id);patch();return}if(t&&t.id==="files-select-all-v7"){selected.clear();if(t.checked)cache.forEach(function(_,id){selected.add(String(id))});patch();return}if(t&&t.id==="file-input")setTimeout(refresh,250)}
-function init(){if(!isIOS())return;refresh();document.addEventListener("click",click,true);document.addEventListener("change",change,true);var list=$("file-list");if(list)new MutationObserver(function(){setTimeout(function(){patch()},30)}).observe(list,{childList:true,subtree:true});setTimeout(refresh,700)}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
+if(window.__PCP_FILES_COMPAT_V10__) return;
+var s=document.createElement("script");
+s.src="./file-manager-direct-v7.js?v=20260824-1752";
+s.async=false;
+(document.head||document.documentElement).appendChild(s);
 })();
