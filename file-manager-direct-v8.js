@@ -1,66 +1,9 @@
-/* PCP Hub — Files manager sharing/rename v8: iOS in-memory share fix */
+/* PCP Hub — Files v8 compatibility loader */
 (function(){
 "use strict";
-if(window.__PCP_FILES_V8__) return;
-window.__PCP_FILES_V8__=true;
-
-var DB_NAME="PCPFieldReportsHubLocalFilesDB", STORE="pdfFiles";
-var dbPromise=null, records=new Map(), prepared=new Map(), selected=new Set(), refreshTimer=null;
-function $(id){return document.getElementById(id)}
-function clean(v){return String(v==null?"":v).trim()}
-function status(msg){var el=$("files-status");if(el)el.textContent=msg||""}
-function ext(name){var m=/\.([A-Za-z0-9]{1,12})$/.exec(clean(name));return m?m[1].toLowerCase():""}
-function hasExt(name){return /\.[A-Za-z0-9]{1,12}$/.test(clean(name))}
-function safeName(name){var n=clean(name||"attachment").replace(/[\\/:*?"<>|]/g,"_").replace(/[\u0000-\u001f]/g,"");return n||"attachment"}
-function mimeFromExt(name){return({pdf:"application/pdf",png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",gif:"image/gif",webp:"image/webp",heic:"image/heic",heif:"image/heif",txt:"text/plain",csv:"text/csv",json:"application/json",zip:"application/zip",doc:"application/msword",docx:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",xls:"application/vnd.ms-excel",xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",ppt:"application/vnd.ms-powerpoint",pptx:"application/vnd.openxmlformats-officedocument.presentationml.presentation"})[ext(name)]||""}
-function extFromMime(type){return({"application/pdf":"pdf","image/png":"png","image/jpeg":"jpg","image/gif":"gif","image/webp":"webp","image/heic":"heic","image/heif":"heif","text/plain":"txt","text/csv":"csv","application/json":"json","application/zip":"zip","application/msword":"doc","application/vnd.openxmlformats-officedocument.wordprocessingml.document":"docx","application/vnd.ms-excel":"xls","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":"xlsx","application/vnd.ms-powerpoint":"ppt","application/vnd.openxmlformats-officedocument.presentationml.presentation":"pptx"})[String(type||"").toLowerCase()]||""}
-function openDb(){if(dbPromise)return dbPromise;dbPromise=new Promise(function(resolve,reject){var r=indexedDB.open(DB_NAME,1);r.onupgradeneeded=function(e){var db=e.target.result;if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE,{keyPath:"id"})};r.onsuccess=function(){resolve(r.result)};r.onerror=function(){reject(r.error)}});return dbPromise}
-function getAll(){return openDb().then(function(db){return new Promise(function(resolve,reject){var r=db.transaction(STORE,"readonly").objectStore(STORE).getAll();r.onsuccess=function(){resolve(r.result||[])};r.onerror=function(){reject(r.error)}})})}
-function put(rec){return openDb().then(function(db){return new Promise(function(resolve,reject){var r=db.transaction(STORE,"readwrite").objectStore(STORE).put(rec);r.onsuccess=function(){resolve(rec)};r.onerror=function(){reject(r.error)}})})}
-function bytesStart(u,a){if(u.length<a.length)return false;for(var i=0;i<a.length;i++)if(u[i]!==a[i])return false;return true}
-function detectType(u){if(bytesStart(u,[0x25,0x50,0x44,0x46]))return"application/pdf";if(bytesStart(u,[0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))return"image/png";if(bytesStart(u,[0xff,0xd8,0xff]))return"image/jpeg";if(u.length>=6&&String.fromCharCode.apply(null,Array.from(u.slice(0,6))).indexOf("GIF8")===0)return"image/gif";if(u.length>=12&&String.fromCharCode.apply(null,Array.from(u.slice(0,4)))==="RIFF"&&String.fromCharCode.apply(null,Array.from(u.slice(8,12)))==="WEBP")return"image/webp";return""}
-async function prepareRecord(rec){
-  if(!rec||!rec.blob)return null;
-  try{
-    /* Critical iOS/Safari workaround: fully materialize the IndexedDB-backed
-       File/Blob bytes into page memory before sharing. Do not wrap the stored
-       File object directly; iOS 26.x can hand consumers an empty attachment. */
-    var ab=await rec.blob.arrayBuffer();
-    if(!ab||!ab.byteLength)throw new Error("Stored file has no readable bytes");
-    var u=new Uint8Array(ab.slice(0,16));
-    var name=safeName(rec.name||(rec.blob&&rec.blob.name)||"attachment");
-    var type=detectType(u)||mimeFromExt(name)||clean(rec.type||(rec.blob&&rec.blob.type)).toLowerCase()||"application/octet-stream";
-    if(!hasExt(name)){var suffix=extFromMime(type);if(suffix)name+="."+suffix}
-    var memBlob=new Blob([ab],{type:type});
-    var file=new File([memBlob],name,{type:type,lastModified:Date.now()});
-    if(file.size!==ab.byteLength)throw new Error("In-memory copy size mismatch");
-    return file;
-  }catch(err){console.error("[FILES V8 PREPARE]",err);return null}
-}
-async function refreshCache(){try{var rows=await getAll();records.clear();prepared.clear();rows.forEach(function(r){records.set(String(r.id),r)});await Promise.all(rows.map(async function(r){var f=await prepareRecord(r);if(f)prepared.set(String(r.id),f)}));Array.from(selected).forEach(function(id){if(!records.has(String(id)))selected.delete(String(id))});patchUi()}catch(err){console.error("[FILES V8 CACHE]",err);status("Could not read saved files on this device.")}}
-function download(file){if(!file)return;var url=URL.createObjectURL(file),a=document.createElement("a");a.href=url;a.download=file.name||"attachment";a.style.display="none";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url)},60000)}
-function nativeShare(files){
-  files=(files||[]).filter(Boolean);
-  if(!files.length){status("File is still preparing. Tap Share again.");refreshCache();return}
-  /* WhatsApp/iOS is most reliable when the Web Share payload contains files only. */
-  var payload={files:files};
-  if(!(navigator.share&&(!navigator.canShare||navigator.canShare(payload)))){files.forEach(download);status(files.length+" file(s) downloaded. Share them from Files/Downloads.");return}
-  try{
-    var p=navigator.share(payload);
-    Promise.resolve(p).then(function(){status(files.length===1?"Share sheet opened.":files.length+" files sent to the share sheet.")}).catch(function(err){if(err&&err.name==="AbortError"){status("Sharing canceled.");return}console.warn("[FILES V8 SHARE]",err);status("WhatsApp could not accept the attachment. The file is valid; try Share again or use Save to Files.")});
-  }catch(err){console.warn("[FILES V8 SHARE]",err);files.forEach(download);status("Direct sharing is not available here. File downloaded instead.")}
-}
-function shareOne(id){var f=prepared.get(String(id));if(!f){status("Preparing this file… tap Share again in a moment.");refreshCache();return}nativeShare([f])}
-function shareSelected(){var ids=Array.from(selected);if(!ids.length){status("Select at least one file first.");return}var files=ids.map(function(id){return prepared.get(String(id))}).filter(Boolean);if(files.length!==ids.length){status("Preparing selected files… tap Share selected again in a moment.");refreshCache();return}nativeShare(files)}
-function selectAll(on){selected.clear();if(on)records.forEach(function(_,id){selected.add(String(id))});document.querySelectorAll("#file-list .select-icon[data-file-id]").forEach(function(cb){cb.checked=selected.has(String(cb.getAttribute("data-file-id")))});updateToolbar()}
-function updateToolbar(){var n=selected.size,share=$("files-share-selected-v8"),count=$("files-selected-v8"),all=$("files-select-all-v8");if(share){share.disabled=!n;share.textContent=n?"Share selected ("+n+")":"Share selected"}if(count)count.textContent=n?n+" selected":"Select files to share together";if(all)all.checked=records.size>0&&n===records.size}
-function rename(id){var rec=records.get(String(id));if(!rec)return;var current=safeName(rec.name||"attachment.pdf"),extension=ext(current),suffix=extension?"."+extension:"",base=suffix?current.slice(0,-suffix.length):current;var next=window.prompt("File name",base);if(next===null)return;next=clean(next).replace(/[\\/:*?"<>|]/g,"_");if(!next){status("Enter a file name.");return}if(suffix&&next.toLowerCase().endsWith(suffix.toLowerCase()))next=next.slice(0,-suffix.length);rec=Object.assign({},rec,{name:safeName(next+suffix)});put(rec).then(function(){records.set(String(id),rec);return prepareRecord(rec)}).then(function(file){if(file)prepared.set(String(id),file);status("Renamed to "+rec.name+".");if(typeof window.loadFilesFromDb==="function")return window.loadFilesFromDb()}).then(function(){setTimeout(patchUi,80)}).catch(function(err){console.error("[FILES V8 RENAME]",err);status("Could not rename this file.")})}
-function patchRow(item){var cb=item.querySelector(".select-icon[data-file-id]"),id=cb&&cb.getAttribute("data-file-id");if(!id){var any=item.querySelector("[data-file-id]");id=any&&any.getAttribute("data-file-id")}if(!id)return;if(cb)cb.checked=selected.has(String(id));var actions=item.querySelector(".file-row-actions");if(actions&&!actions.querySelector('[data-files-v8="rename"]')){var old=actions.querySelector('[data-files-v7="rename"],[data-file-v4="rename"]');if(old)old.remove();var b=document.createElement("button");b.type="button";b.className="file-mini-btn";b.setAttribute("data-files-v8","rename");b.setAttribute("data-file-id",id);b.textContent="Rename";var share=actions.querySelector('[data-file-action="share"],[data-action="share"]');actions.insertBefore(b,share||actions.firstChild)}var shareBtn=item.querySelector('[data-file-action="share"],[data-action="share"]');if(shareBtn)shareBtn.textContent="Share"}
-function patchUi(){var input=$("file-input");if(input){input.multiple=true;input.setAttribute("multiple","multiple")}var box=$("file-list");if(!box)return;var old=$("files-toolbar-v7");if(old)old.remove();var parent=box.parentNode;if(parent&&!$("files-toolbar-v8")){var bar=document.createElement("div");bar.id="files-toolbar-v8";bar.innerHTML='<label class="files-v8-check"><input id="files-select-all-v8" type="checkbox"> <span>Select all</span></label><button id="files-share-selected-v8" type="button" disabled>Share selected</button><span id="files-selected-v8">Select files to share together</span>';parent.insertBefore(bar,box)}box.querySelectorAll(".file-item").forEach(patchRow);updateToolbar()}
-function addCss(){if($("files-v8-css"))return;var s=document.createElement("style");s.id="files-v8-css";s.textContent=`#files-toolbar-v8{display:grid;grid-template-columns:auto minmax(150px,1fr);gap:9px 10px;align-items:center;margin:12px 0;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--bg2)}#files-toolbar-v8 .files-v8-check{display:flex;align-items:center;gap:7px;color:var(--text2);font-size:12px;white-space:nowrap}#files-toolbar-v8 input{width:18px;height:18px}#files-share-selected-v8{min-height:44px;border:0;border-radius:10px;padding:9px 14px;background:var(--accent2);color:#fff;font-weight:800;font-family:'DM Sans',sans-serif;cursor:pointer}#files-share-selected-v8:disabled{opacity:.4}#files-selected-v8{grid-column:1/-1;font-size:11.5px;color:var(--text3)}#page-files .file-item{min-width:0}#page-files .file-item>div{min-width:0}#page-files .file-name{overflow:hidden;text-overflow:ellipsis;word-break:break-word}#page-files .file-row-actions{display:flex!important;flex-wrap:wrap!important;gap:7px!important}#page-files .file-mini-btn{min-height:40px!important;padding:8px 10px!important;touch-action:manipulation}@media(max-width:560px){#files-toolbar-v8{grid-template-columns:1fr}#files-toolbar-v8 .files-v8-check{min-height:38px}#files-share-selected-v8{width:100%}#files-selected-v8{grid-column:auto}#page-files .file-row-actions .file-mini-btn{flex:1 1 calc(50% - 7px);min-width:0}}`;document.head.appendChild(s)}
-function handleClick(e){var renameBtn=e.target&&e.target.closest?e.target.closest('[data-files-v8="rename"]'):null;if(renameBtn){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();rename(renameBtn.getAttribute("data-file-id"));return}var bulk=e.target&&e.target.closest?e.target.closest("#files-share-selected-v8"):null;if(bulk){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();shareSelected();return}var share=e.target&&e.target.closest?e.target.closest('#file-list [data-file-action="share"],#file-list [data-action="share"]'):null;if(share){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();shareOne(share.getAttribute("data-file-id"));return}var dl=e.target&&e.target.closest?e.target.closest('#file-list [data-file-action="download"],#file-list [data-action="download"]'):null;if(dl){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();var f=prepared.get(String(dl.getAttribute("data-file-id")));if(f)download(f);else{status("Preparing this file… tap Download again.");refreshCache()}return}}
-function handleChange(e){var t=e.target;if(t&&t.id==="files-select-all-v8"){selectAll(!!t.checked);return}if(t&&t.matches&&t.matches("#file-list .select-icon[data-file-id]")){var id=String(t.getAttribute("data-file-id"));if(t.checked)selected.add(id);else selected.delete(id);updateToolbar();return}if(t&&t.id==="file-input"){setTimeout(refreshCache,120);setTimeout(refreshCache,700)}}
-function observe(){var list=$("file-list");if(!list||list.dataset.filesV8Observed)return;list.dataset.filesV8Observed="1";new MutationObserver(function(){clearTimeout(refreshTimer);refreshTimer=setTimeout(function(){patchUi();refreshCache()},100)}).observe(list,{childList:true,subtree:true})}
-function init(){addCss();patchUi();observe();refreshCache();document.addEventListener("click",handleClick,true);document.addEventListener("change",handleChange,true);document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")refreshCache()});setTimeout(function(){patchUi();observe();refreshCache()},500)}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
+if(window.__PCP_FILES_COMPAT_V10__) return;
+var s=document.createElement("script");
+s.src="./file-manager-direct-v7.js?v=20260824-1752";
+s.async=false;
+(document.head||document.documentElement).appendChild(s);
 })();
