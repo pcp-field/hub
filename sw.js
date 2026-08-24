@@ -25,11 +25,10 @@ self.addEventListener("fetch", function(event){
       var type = response.headers.get("content-type") || "";
       if(!response.ok || type.indexOf("text/html") === -1) return response;
       var html = await response.text();
-      if(html.indexOf('id="page-courses"') === -1 || html.indexOf("course-renewal-mobile.js") !== -1){
-        return new Response(html,{status:response.status,statusText:response.statusText,headers:response.headers});
+      if(html.indexOf('id="page-courses"') !== -1 && html.indexOf("course-renewal-mobile.js") === -1){
+        var tag = '<script src="'+COURSE_UI_SRC+'"></script>';
+        html = /<\/body\s*>/i.test(html) ? html.replace(/<\/body\s*>/i, tag+"</body>") : html+tag;
       }
-      var tag = '<script src="'+COURSE_UI_SRC+'"></script>';
-      html = /<\/body\s*>/i.test(html) ? html.replace(/<\/body\s*>/i, tag+"</body>") : html+tag;
       var headers = new Headers(response.headers);
       headers.delete("content-length");
       headers.delete("content-encoding");
@@ -106,8 +105,16 @@ async function sweep(){
   var log=(await readState(db,"log"))||{};
   var workerLog=(await readState(db,"workerLog"))||{};
   log=Object.assign({},log,workerLog);
-  if(!settings.enabled){ db.close(); return; }
-  var changed=false;
+  var changed=false, currentCycles={};
+  courses.forEach(function(c){ if(c&&c.id&&c.expiry) currentCycles[String(c.id)]=String(c.expiry); });
+  Object.keys(log).forEach(function(k){
+    var parts=k.split("|");
+    if(!currentCycles[parts[0]] || currentCycles[parts[0]]!==parts[1]){ delete log[k]; changed=true; }
+  });
+  if(!settings.enabled){
+    if(changed){ await writeState(db,"log",log); await writeState(db,"workerLog",log); }
+    db.close(); return;
+  }
   for(var i=0;i<courses.length;i++){
     var c=courses[i]||{}, days=daysUntil(c.expiry);
     if(days===null) continue;
