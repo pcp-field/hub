@@ -7,6 +7,7 @@ on:
       - '.github/workflows/inject-course-save-v6.yml'
       - 'course-save-direct-v6.js'
       - 'file-manager-direct-v8.js'
+      - 'file-manager-ios-fallback-v9.js'
 
 permissions:
   contents: write
@@ -26,19 +27,18 @@ jobs:
           text = p.read_text(encoding='utf-8')
 
           course = '<script src="./course-save-direct-v6.js?v=20260824-1720"></script>'
-          if course not in text:
-              if '</body>' not in text:
-                  raise SystemExit('Could not find </body> in index.html')
-              text = text.replace('</body>', course + '\n</body>', 1)
+          files7 = '<script src="./file-manager-direct-v7.js?v=20260824-1726"></script>'
+          files8 = '<script src="./file-manager-direct-v8.js?v=20260824-1735"></script>'
+          ios9 = '<script src="./file-manager-ios-fallback-v9.js?v=20260824-1742"></script>'
 
-          old_files = '<script src="./file-manager-direct-v7.js?v=20260824-1726"></script>'
-          new_files = '<script src="./file-manager-direct-v8.js?v=20260824-1735"></script>'
-          if old_files in text:
-              text = text.replace(old_files, new_files, 1)
-          elif new_files not in text:
-              if '</body>' not in text:
-                  raise SystemExit('Could not find </body> in index.html')
-              text = text.replace('</body>', new_files + '\n</body>', 1)
+          if course not in text:
+              text = text.replace('</body>', course + '\n</body>', 1)
+          if files7 in text:
+              text = text.replace(files7, files8, 1)
+          elif files8 not in text:
+              text = text.replace('</body>', files8 + '\n</body>', 1)
+          if ios9 not in text:
+              text = text.replace('</body>', ios9 + '\n</body>', 1)
 
           p.write_text(text, encoding='utf-8')
           PY
@@ -51,5 +51,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
-          git commit -m "Use iOS-safe in-memory file sharing"
+          git commit -m "Use reliable iPhone Files sharing fallback"
           git push
