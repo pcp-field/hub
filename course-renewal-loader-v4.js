@@ -4,8 +4,9 @@
 function load(src,done){var s=document.createElement("script");s.src=src;s.onload=function(){if(done)done()};s.onerror=function(){console.error("[PCP LOADER] Failed:",src)};document.head.appendChild(s)}
 function navigation(){load("./mobile-navigation-history-v1.js?v=20260824-1907")}
 function locationUi(){load("./location-mobile-rebuild-v1.js?v=20260824-1914")}
+function reportUi(){load("./report-mobile-rebuild-v1.js?v=20260824-1926",function(){var sel=document.getElementById("report-type");var field=sel&&sel.closest(".field");var card=document.querySelector("#page-report > .card");if(field&&field.parentElement===card)field.style.display="none"})}
 function runtime(){load("./pcp-runtime-v4.js?v=20260824-4")}
 function hotfix(){load("./course-renewal-hotfix-v3.js?v=20260824-3",runtime)}
-function start(){navigation();locationUi();if(window.PCP_COURSE_MOBILE){hotfix();return}load("./course-renewal-mobile.js?v=20260824-2",hotfix)}
+function start(){navigation();locationUi();reportUi();if(window.PCP_COURSE_MOBILE){hotfix();return}load("./course-renewal-mobile.js?v=20260824-2",hotfix)}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start,{once:true});else start();
 })();
