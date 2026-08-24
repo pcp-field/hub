@@ -6,7 +6,7 @@ on:
     paths:
       - '.github/workflows/inject-course-save-v6.yml'
       - 'course-save-direct-v6.js'
-      - 'file-manager-direct-v7.js'
+      - 'file-manager-direct-v8.js'
 
 permissions:
   contents: write
@@ -25,21 +25,20 @@ jobs:
           p = Path('index.html')
           text = p.read_text(encoding='utf-8')
 
-          old = '<script src="./course-save-direct-v5.js?v=20260824-1713"></script>'
           course = '<script src="./course-save-direct-v6.js?v=20260824-1720"></script>'
-          files = '<script src="./file-manager-direct-v7.js?v=20260824-1726"></script>'
-
-          if old in text:
-              text = text.replace(old, course, 1)
-          elif course not in text:
+          if course not in text:
               if '</body>' not in text:
                   raise SystemExit('Could not find </body> in index.html')
               text = text.replace('</body>', course + '\n</body>', 1)
 
-          if files not in text:
+          old_files = '<script src="./file-manager-direct-v7.js?v=20260824-1726"></script>'
+          new_files = '<script src="./file-manager-direct-v8.js?v=20260824-1735"></script>'
+          if old_files in text:
+              text = text.replace(old_files, new_files, 1)
+          elif new_files not in text:
               if '</body>' not in text:
                   raise SystemExit('Could not find </body> in index.html')
-              text = text.replace('</body>', files + '\n</body>', 1)
+              text = text.replace('</body>', new_files + '\n</body>', 1)
 
           p.write_text(text, encoding='utf-8')
           PY
@@ -52,5 +51,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
-          git commit -m "Load mobile file manager v7"
+          git commit -m "Use iOS-safe in-memory file sharing"
           git push
