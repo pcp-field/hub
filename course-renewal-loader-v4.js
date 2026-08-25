@@ -9,6 +9,8 @@ function spaceoutUi(){load("./spaceout-rebuild-prep-v1.js?v=20260824-1941",funct
 function dailyUi(){load("./daily-job-log-mobile-rebuild-v1.js?v=20260824-1937")}
 function runtime(){load("./pcp-runtime-v4.js?v=20260824-4")}
 function hotfix(){load("./course-renewal-hotfix-v3.js?v=20260824-3",runtime)}
-function start(){navigation();locationUi();reportUi();spaceoutUi();dailyUi();if(window.PCP_COURSE_MOBILE){hotfix();return}load("./course-renewal-mobile.js?v=20260824-2",hotfix)}
+function reminders(done){load("./course-reminder-7-3-v1.js?v=20260825-1408",done)}
+function courses(){if(window.PCP_COURSE_MOBILE){reminders(hotfix);return}load("./course-renewal-mobile.js?v=20260824-2",function(){reminders(hotfix)})}
+function start(){navigation();locationUi();reportUi();spaceoutUi();dailyUi();courses()}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start,{once:true});else start();
 })();
